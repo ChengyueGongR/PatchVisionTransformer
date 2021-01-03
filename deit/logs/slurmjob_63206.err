@@ -1,0 +1,17 @@
+Failed to find state_dict_ema, starting from loaded model weights
+Failed to find state_dict_ema, starting from loaded model weights
+Failed to find state_dict_ema, starting from loaded model weights
+Failed to find state_dict_ema, starting from loaded model weights
+/u/cygong/anaconda/envs/dgx/lib/python3.8/site-packages/PIL/TiffImagePlugin.py:792: UserWarning: Corrupt EXIF data.  Expecting to read 4 bytes but only got 0. 
+  warnings.warn(str(msg))
+/u/cygong/anaconda/envs/dgx/lib/python3.8/site-packages/PIL/TiffImagePlugin.py:792: UserWarning: Corrupt EXIF data.  Expecting to read 4 bytes but only got 0. 
+  warnings.warn(str(msg))
+/u/cygong/anaconda/envs/dgx/lib/python3.8/site-packages/PIL/TiffImagePlugin.py:792: UserWarning: Corrupt EXIF data.  Expecting to read 4 bytes but only got 0. 
+  warnings.warn(str(msg))
+/u/cygong/anaconda/envs/dgx/lib/python3.8/site-packages/PIL/TiffImagePlugin.py:792: UserWarning: Corrupt EXIF data.  Expecting to read 4 bytes but only got 0. 
+  warnings.warn(str(msg))
+/u/cygong/anaconda/envs/dgx/lib/python3.8/site-packages/PIL/TiffImagePlugin.py:792: UserWarning: Corrupt EXIF data.  Expecting to read 4 bytes but only got 0. 
+  warnings.warn(str(msg))
+/u/cygong/anaconda/envs/dgx/lib/python3.8/site-packages/PIL/TiffImagePlugin.py:792: UserWarning: Corrupt EXIF data.  Expecting to read 4 bytes but only got 0. 
+  warnings.warn(str(msg))
+slurmstepd-dgx-7: error: *** JOB 63206 ON dgx-7 CANCELLED AT 2021-01-01T13:54:49 ***
