@@ -284,17 +284,18 @@ class VisionTransformer(nn.Module):
         self.pos_drop = nn.Dropout(p=drop_rate)
 
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
+        '''
         self.blocks = nn.ModuleList([
             Block(
                 dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
                 drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[i], norm_layer=norm_layer)
             for i in range(depth)])
-
-        # testing: whether adding a shuffle layer is useful
         '''
+        
+        # testing: whether adding a shuffle layer is useful
         blocks = []
         for i in range(depth):
-            if True: # note that we will add a flag
+            if True: # we will add a flag
                 blocks.append(nn.Sequential(ShuffleData(), Block(
                     dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
                     drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[i], norm_layer=norm_layer)))
@@ -303,7 +304,6 @@ class VisionTransformer(nn.Module):
                     dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
                     drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[i], norm_layer=norm_layer))
         self.blocks = nn.ModuleList(blocks)
-        '''
 
         self.norm = norm_layer(embed_dim)
 
