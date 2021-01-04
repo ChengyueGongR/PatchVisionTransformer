@@ -173,31 +173,29 @@ class Block(nn.Module):
         
         self.mlp = Mlp(in_features=dim, hidden_features=int(mlp_hidden_dim / rate), act_layer=act_layer, drop=drop, groups=groups)
         self.norm_post = norm_layer(dim)
+        
         self.mlp1 = Mlp(in_features=dim, hidden_features=int(mlp_hidden_dim / rate), act_layer=act_layer, drop=drop, groups=groups)
         self.norm_pre1 = norm_layer(dim)
-        '''
-        self.mlp2 = Mlp(in_features=dim, hidden_features=int(mlp_hidden_dim / rate), act_layer=act_layer, drop=drop, groups=groups)
-        self.norm_pre2 = norm_layer(dim)
-        self.mlp3 = Mlp(in_features=dim, hidden_features=int(mlp_hidden_dim / rate), act_layer=act_layer, drop=drop, groups=groups)
-        self.norm_pre3 = norm_layer(dim)
-        '''
+
         self.conv = torch.nn.Conv2d(in_channels=dim, out_channels=dim, kernel_size=3, groups=dim, padding=1)
+        self.conv1 = torch.nn.Conv2d(in_channels=dim, out_channels=dim, kernel_size=3, groups=dim, padding=1)
     
     def forward(self, x):
-        # simply apply convformer (mb block conv -> simple channel-wise conv [channel-wise conv is sth. similar to relative embedding but outside the attention])
-        x = x + 1. / 2 * self.drop_path(self.mlp1(self.norm_pre1(x)))
-        # x = x + 1. / 4 * self.drop_path(self.mlp2(self.norm_pre2(x)))
-        x = x + self.drop_path(self.attn(self.norm1(x))) # x = x + self.drop_path(self.norm1(self.attn(x)))
-        batch_size = x.shape[0]
-        hidden = x.shape[-1]
-        patch_length = int(x.shape[1] ** .5) # 224 // 16 
-        x[:, 1:, :] = x[:, 1:, :] + self.conv(x[:, 1:, :].transpose(1, 2).reshape(batch_size, hidden, patch_length, patch_length))\
-                .reshape(batch_size, hidden, patch_length*patch_length).transpose(1, 2)
-        x = x + 1. / 2 * self.drop_path(self.mlp(self.norm2(x)))
+        batch_size, hidden, patch_length = x.shape[0], x.shape[-1], 224 // 16 # int(x.shape[1] ** .5)
 
-        # x = x + 1. / 4 * self.drop_path(self.mlp1(self.norm_pre1(x)))
-        # x = x + 1. / 4 * self.drop_path(self.mlp2(self.norm_pre2(x)))
-        # x = x + 1. / 4 * self.drop_path(self.mlp3(self.norm_pre3(x)))
+        
+        x[:, 1:, :] += self.conv1(x[:, 1:, :].transpose(1, 2).reshape(batch_size, hidden, patch_length, patch_length))\
+                .reshape(batch_size, hidden, patch_length*patch_length).transpose(1, 2)
+        x = self.norm_pre1(x)
+        x = x + 1. / 2 * self.drop_path(self.mlp1(x))
+
+        x = x + self.drop_path(self.attn(self.norm1(x)))
+
+        x[:, 1:, :] += self.conv(x[:, 1:, :].transpose(1, 2).reshape(batch_size, hidden, patch_length, patch_length))\
+                .reshape(batch_size, hidden, patch_length*patch_length).transpose(1, 2)
+        x = self.norm2(x)
+        x = x + 1. / 2 * self.drop_path(self.mlp(x))
+
         x = self.norm_post(x)
 
         return x
