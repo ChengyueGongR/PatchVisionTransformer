@@ -190,13 +190,13 @@ class Block(nn.Module):
         x = x + 1. / 2 * self.drop_path(self.mlp1(x))
 
         x = x + self.drop_path(self.attn(self.norm1(x)))
-
+        attn_x = x
         x[:, 1:, :] += self.conv(x[:, 1:, :].transpose(1, 2).reshape(batch_size, hidden, patch_length, patch_length))\
                 .reshape(batch_size, hidden, patch_length*patch_length).transpose(1, 2)
         x = self.norm2(x)
         x = x + 1. / 2 * self.drop_path(self.mlp(x))
 
-        x = self.norm_post(x)
+        x = self.norm_post(x + attn_x)
 
         return x
 
