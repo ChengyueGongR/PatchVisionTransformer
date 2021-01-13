@@ -75,23 +75,6 @@ default_cfgs = {
     'vit_base_resnet50d_224': _cfg(),
 }
 
-class ShuffleData(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, x):
-        batch_size, num_patches, num_channels = x.size()
-        return x.reshape([batch_size, num_patches, -1, 16]).permute(0, 1, 3, 2).reshape([batch_size, num_patches, -1])
-
-class RecoverData(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, x):
-        batch_size, num_patches, num_channels = x.size()
-        return x.reshape([batch_size, num_patches, 16, -1]).permute(0, 1, 3, 2).reshape([batch_size, num_patches, -1])
-
-
 class ScaleNorm(nn.Module):
     """ScaleNorm"""
     def __init__(self, scale, eps=1e-5):
@@ -154,16 +137,6 @@ class MlpNext(nn.Module):
     def forward(self, x):
         return self.drop(sum([sublayer(x) for sublayer in self.sublayer_lst]))
 
-class LinearNext(nn.Module):
-    def __init__(self, in_features, out_features, bias=False, groups=4, reduction=8):
-        super().__init__()
-        channel = in_features 
-        self.sublayer_lst = nn.ModuleList([nn.Sequential(nn.Linear(channel, channel // reduction, bias=bias), nn.Linear(channel // reduction, out_features, bias=bias))
-            for _ in range(groups)])
-
-    def forward(self, x):
-        return sum([sublayer(x) for sublayer in self.sublayer_lst])
-
 class Attention(nn.Module):
     def __init__(self, dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0., proj_drop=0.):
         super().__init__()
@@ -171,8 +144,7 @@ class Attention(nn.Module):
         head_dim = dim // num_heads
         # NOTE scale factor was wrong in my original version, can set manually to be compat with prev weights
         self.scale = qk_scale or head_dim ** -0.5
-
-        # self.qkv = LinearNext(dim, dim * 3, bias=qkv_bias, groups=4)
+        
         self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj = nn.Linear(dim, dim)
@@ -184,13 +156,6 @@ class Attention(nn.Module):
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
         q, k, v = qkv[0], qkv[1], qkv[2]   # make torchscript happy (cannot use tensor as tuple)
 
-        '''
-        # additional implementation of relative positional embedding
-        relative_pos = q.permute(2, 0, 1, 3).reshape(N, B * self.num_heads, C // self.num_heads) @ self.relative_emb
-        relative_pos = relative_pos.reshape(N, B, -1, N)
-        attn = (q @ k.transpose(-2, -1) + relative_pos.permute(1, 2, 0, 3)) * self.scale
-        '''
-        
         attn = (q @ k.transpose(-2, -1)) * self.scale
         attn = attn.softmax(dim=-1)
         attn = self.attn_drop(attn)
@@ -306,7 +271,6 @@ class OverLapPatchEmbed(nn.Module):
         # self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=39, stride=14)
         # self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=20, stride=15)
         self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=16, stride=16)
-        # patch_size[0] + 2 * self.overlap, stride=patch_size[0] - 2)
 
     def forward(self, x):
         B, C, H, W = x.shape
