@@ -152,10 +152,6 @@ def evaluate(data_loader, model, device):
     # switch to evaluation mode
     model.eval()
     
-    #import timm
-    #teacher_model = timm.create_model('gluon_senet154'.lower(), pretrained=True).to(device)
-    # teacher_model = timm.create_model('mobilenetv2_100'.lower(), pretrained=True).to(device)
-    #teacher_model.eval()
     for images, target in metric_logger.log_every(data_loader, 100, header):
         images = images.to(device, non_blocking=True)
         target = target.to(device, non_blocking=True)
@@ -163,19 +159,13 @@ def evaluate(data_loader, model, device):
         # compute output
         with torch.cuda.amp.autocast():
             output = model(images)
-            #teacher_output = teacher_model(images)
             loss = criterion(output, target)
-            #teacher_loss = criterion(teacher_output, target)
         acc1, acc5 = accuracy(output, target, topk=(1, 5))
-        #teacher_acc1, teacher_acc5 = accuracy(teacher_output, target, topk=(1, 5))
         batch_size = images.shape[0]
         metric_logger.update(loss=loss.item())
 
-        #metric_logger.meters['t_loss'].update(teacher_loss.item(), n=batch_size)
         metric_logger.meters['acc1'].update(acc1.item(), n=batch_size)
         metric_logger.meters['acc5'].update(acc5.item(), n=batch_size)
-        #metric_logger.meters['t_acc1'].update(teacher_acc1.item(), n=batch_size)
-        #metric_logger.meters['t_acc5'].update(teacher_acc5.item(), n=batch_size)
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print('* Acc@1 {top1.global_avg:.3f} Acc@5 {top5.global_avg:.3f} loss {losses.global_avg:.3f}'
