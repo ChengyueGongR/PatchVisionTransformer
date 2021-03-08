@@ -182,9 +182,3 @@ def evaluate(data_loader, model, device):
           .format(top1=metric_logger.acc1, top5=metric_logger.acc5, losses=metric_logger.loss))
 
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
-
-
-def selfdistill(feature, target):
-    # feature = nn.functional.normalize(feature, dim=-1)
-    # target = nn.functional.normalize(target, dim=-1)
-    return torch.norm(feature - target.detach(), dim=-1).mean()
