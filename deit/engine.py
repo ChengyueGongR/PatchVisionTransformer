@@ -83,9 +83,8 @@ def two_mix(samples, targets, num_patch=14, local_consist=7):
 
     num_batch, num_channel, img_size = samples.shape[0], samples.shape[1], samples.shape[2]
     patch_size = img_size // num_patch
-    new_samples = samples.reshape(num_batch, num_channel, num_patch, patch_size, num_patch, patch_size)# .permute(0, 1, 3, 5, 2, 4)
+    new_samples = samples.reshape(num_batch, num_channel, num_patch, patch_size, num_patch, patch_size)
 
-    # new_samples = samples.reshape(num_batch, num_channel, patch_size, num_patch, patch_size, num_patch).permute(0, 1, 2, 4, 3, 5)
     new_samples = new_samples * mask.reshape(1, 1, num_patch, 1, num_patch, 1) + new_samples[img_index] * (1 - mask.reshape(1, 1, num_patch, 1, num_patch, 1) )
     new_samples = new_samples.reshape(num_batch, num_channel, img_size, img_size)
     new_targets = targets * mix_rate + targets[img_index] * (1 - mix_rate)
@@ -117,8 +116,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
             loss = criterion(samples, outputs, targets)
 
             loss_value = loss.item()
-            loss = 0.95 * loss + 0.05 * alpha_divergence(outputs, targets, 1.0).mean() # avoid over-est
-            loss += .25 * r_loss
+            loss += .25 * r_loss # rescale: 0.25 * 4 = 1 
 
         if not math.isfinite(loss_value):
             print("Loss is {}, stopping training".format(loss_value))
