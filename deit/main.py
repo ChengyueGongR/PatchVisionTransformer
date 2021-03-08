@@ -1,9 +1,5 @@
 # Copyright (c) 2015-present, Facebook, Inc.
 # All rights reserved.
-#
-# This source code is licensed under the CC-by-NC license found in the
-# LICENSE file in the root directory of this source tree.
-#
 import argparse
 import datetime
 import numpy as np
@@ -14,7 +10,6 @@ import json
 
 from pathlib import Path
 
-# from compute_flops import count_model_param_flops
 from ptflops import get_model_complexity_info
 from timm.data import Mixup
 from timm.models import create_model
@@ -25,6 +20,7 @@ from timm.utils import NativeScaler, get_state_dict, ModelEma
 
 from datasets import build_dataset
 from engine import train_one_epoch, evaluate
+from losses import DistillationLoss
 from samplers import RASampler
 import models
 import utils
@@ -34,7 +30,6 @@ def get_args_parser():
     parser = argparse.ArgumentParser('DeiT training and evaluation script', add_help=False)
     parser.add_argument('--batch-size', default=64, type=int)
     parser.add_argument('--epochs', default=300, type=int)
-
     # Model parameters
     parser.add_argument('--model', default='deit_base_patch16_224', type=str, metavar='MODEL',
                         help='Name of model to train')
@@ -44,8 +39,6 @@ def get_args_parser():
                         help='Dropout rate (default: 0.)')
     parser.add_argument('--drop-path', type=float, default=0.1, metavar='PCT',
                         help='Drop path rate (default: 0.1)')
-    parser.add_argument('--drop-block', type=float, default=None, metavar='PCT',
-                        help='Drop block rate (default: None)')
 
     parser.add_argument('--model-ema', action='store_true')
     parser.add_argument('--no-model-ema', action='store_false', dest='model_ema')
@@ -131,8 +124,16 @@ def get_args_parser():
     parser.add_argument('--mixup-mode', type=str, default='batch',
                         help='How to apply mixup/cutmix params. Per "batch", "pair", or "elem"')
 
+    # Distillation parameters
+    parser.add_argument('--teacher-model', default='regnety_160', type=str, metavar='MODEL',
+                        help='Name of teacher model to train (default: "regnety_160"')
+    parser.add_argument('--teacher-path', type=str, default='')
+    parser.add_argument('--distillation-type', default='none', choices=['none', 'soft', 'hard'], type=str, help="")
+    parser.add_argument('--distillation-alpha', default=0.5, type=float, help="")
+    parser.add_argument('--distillation-tau', default=1.0, type=float, help="")
+
     # Dataset parameters
-    parser.add_argument('--data-path', default='/datasets01_101/imagenet_full_size/061417/', type=str,
+    parser.add_argument('--data-path', default='/datasets01/imagenet_full_size/061417/', type=str,
                         help='dataset path')
     parser.add_argument('--data-set', default='IMNET', choices=['CIFAR', 'IMNET', 'INAT', 'INAT19'],
                         type=str, help='Image Net dataset path')
@@ -149,7 +150,8 @@ def get_args_parser():
     parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
                         help='start epoch')
     parser.add_argument('--eval', action='store_true', help='Perform evaluation only')
-    parser.add_argument('--num_workers', default=10, type=int)
+    parser.add_argument('--dist-eval', action='store_true', default=False, help='Enabling distributed evaluation')
+    parser.add_argument('--num_workers', default=6, type=int)
     parser.add_argument('--pin-mem', action='store_true',
                         help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.')
     parser.add_argument('--no-pin-mem', action='store_false', dest='pin_mem',
@@ -192,8 +194,18 @@ def main(args):
             sampler_train = torch.utils.data.DistributedSampler(
                 dataset_train, num_replicas=num_tasks, rank=global_rank, shuffle=True
             )
+        if args.dist_eval:
+            if len(dataset_val) % num_tasks != 0:
+                print('Warning: Enabling distributed evaluation with an eval dataset not divisible by process number. '
+                      'This will slightly alter validation results as extra duplicate entries are added to achieve '
+                      'equal num of samples per-process.')
+            sampler_val = torch.utils.data.DistributedSampler(
+                dataset_val, num_replicas=num_tasks, rank=global_rank, shuffle=False)
+        else:
+            sampler_val = torch.utils.data.SequentialSampler(dataset_val)
     else:
         sampler_train = torch.utils.data.RandomSampler(dataset_train)
+        sampler_val = torch.utils.data.SequentialSampler(dataset_val)
 
     data_loader_train = torch.utils.data.DataLoader(
         dataset_train, sampler=sampler_train,
@@ -204,9 +216,11 @@ def main(args):
     )
 
     data_loader_val = torch.utils.data.DataLoader(
-        dataset_val, batch_size=int(1.2 * args.batch_size),
-        shuffle=False, num_workers=args.num_workers,
-        pin_memory=args.pin_mem, drop_last=False
+        dataset_val, sampler=sampler_val,
+        batch_size=int(1 * args.batch_size),
+        num_workers=args.num_workers,
+        pin_memory=args.pin_mem,
+        drop_last=False
     )
 
     mixup_fn = None
@@ -224,13 +238,13 @@ def main(args):
         num_classes=args.nb_classes,
         drop_rate=args.drop,
         drop_path_rate=args.drop_path,
-        drop_block_rate=args.drop_block,
+        drop_block_rate=None,
     )
 
     # TODO: finetuning
-    # print(count_model_param_flops(model, multiply_adds=False))
+
     model.to(device)
-    # print(model)
+
     model_ema = None
     if args.model_ema:
         # Important to create EMA model after cuda(), DP wrapper, and AMP but before SyncBN and DDP wrapper
@@ -246,9 +260,9 @@ def main(args):
         model_without_ddp = model.module
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print('number of params:', n_parameters)
-    print(get_model_complexity_info(model, (3, 224, 224), as_strings=True, print_per_layer_stat=True, verbose=True))
+    print(model)
+    # print(get_model_complexity_info(model, (3, 224, 224), as_strings=True, print_per_layer_stat=True, verbose=True))
 
-    print(utils.get_world_size())
     linear_scaled_lr = args.lr * args.batch_size * utils.get_world_size() / 512.0
     args.lr = linear_scaled_lr
     optimizer = create_optimizer(args, model)
@@ -266,6 +280,53 @@ def main(args):
     else:
         criterion = torch.nn.CrossEntropyLoss()
 
+    teacher_model = None
+    '''
+    if args.distillation_type != 'none':
+        assert args.teacher_path, 'need to specify teacher-path when using distillation'
+        print(f"Creating teacher model: {args.teacher_model}")
+        teacher_model = create_model(
+            args.teacher_model,
+            pretrained=False,
+            num_classes=args.nb_classes,
+            global_pool='avg',
+        )
+        if args.teacher_path.startswith('https'):
+            checkpoint = torch.hub.load_state_dict_from_url(
+                args.teacher_path, map_location='cpu', check_hash=True)
+        else:
+            checkpoint = torch.load(args.teacher_path, map_location='cpu')
+        teacher_model.load_state_dict(checkpoint['model'])
+        teacher_model.to(device)
+        teacher_model.eval()
+    '''
+
+    '''
+    # teacher
+    from torchvision.models.resnet import ResNet, Bottleneck
+    from torch.hub import load_state_dict_from_url
+    teacher_model0 = ResNet(Bottleneck, [3, 4, 23, 3], groups=32, width_per_group=16)
+    state_dict = load_state_dict_from_url('https://download.pytorch.org/models/ig_resnext101_32x16-c6f796b0.pth')
+    teacher_model0.load_state_dict(state_dict)
+    teacher_model0.to(device)
+    teacher_model0.eval()
+    teacher_model = [teacher_model0, teacher_model]
+
+    '''
+    
+    '''
+    import timm
+    # teacher_model = [timm.create_model('gluon_senet154'.lower(), pretrained=True).to(device), timm.create_model('gluon_resnet152_v1s'.lower(), pretrained=True).to(device)] 
+    teacher_model = [timm.create_model('gluon_senet154'.lower(), pretrained=True).to(device), teacher_model] 
+    teacher_model[0].eval()
+    teacher_model[1].eval()
+    ''' 
+    # wrap the criterion in our custom DistillationLoss, which
+    # just dispatches to the original criterion if args.distillation_type is 'none'
+    criterion = DistillationLoss(
+        criterion, teacher_model, args.distillation_type, args.distillation_alpha, args.distillation_tau
+    )
+
     output_dir = Path(args.output_dir)
     if args.resume:
         if args.resume.startswith('https'):
@@ -273,11 +334,11 @@ def main(args):
                 args.resume, map_location='cpu', check_hash=True)
         else:
             checkpoint = torch.load(args.resume, map_location='cpu')
-        model_without_ddp.load_state_dict(checkpoint['model'])
+        model_without_ddp.load_state_dict(checkpoint['model'], strict=False)
         if not args.eval and 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint:
             optimizer.load_state_dict(checkpoint['optimizer'])
-            lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
-            args.start_epoch = checkpoint['epoch'] + 1
+            # lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
+            # args.start_epoch = checkpoint['epoch'] + 1
             if args.model_ema:
                 utils._load_checkpoint_for_ema(model_ema, checkpoint['model_ema'])
 
@@ -289,6 +350,9 @@ def main(args):
     print("Start training")
     start_time = time.time()
     max_accuracy = 0.0
+    for _ in range(0, args.start_epoch):
+        lr_scheduler.step(_)
+
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
@@ -296,8 +360,9 @@ def main(args):
         train_stats = train_one_epoch(
             model, criterion, data_loader_train,
             optimizer, device, epoch, loss_scaler,
-            args.clip_grad, model_ema, mixup_fn
-        )
+            args.clip_grad, model_ema, mixup_fn,
+            teacher=teacher_model,
+            )
 
         lr_scheduler.step(epoch)
         if args.output_dir:
