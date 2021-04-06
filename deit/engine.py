@@ -116,7 +116,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
             loss = criterion(samples, outputs, targets)
 
             loss_value = loss.item()
-            loss += .25 * r_loss # rescale: 0.25 * 4 = 1 
+            loss += 1. * r_loss 
 
         if not math.isfinite(loss_value):
             print("Loss is {}, stopping training".format(loss_value))
