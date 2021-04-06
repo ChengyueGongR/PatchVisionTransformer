@@ -53,13 +53,14 @@ class VisionTransformer(nn.Module):
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
         self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + 1, embed_dim))
-        self.pos_drop = nn.Dropout(p=drop_rate)
-
+        self.pos_drop = nn.Dropout(p=0.)
+        self.drop = nn.Dropout(p=drop_rate)
+        
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
         self.blocks = nn.ModuleList([
             Block(
                 dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
-                drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[i], norm_layer=norm_layer)
+                drop=0., attn_drop=0., drop_path=dpr[i], norm_layer=norm_layer)
             for i in range(depth)])
         self.norm = norm_layer(embed_dim)
 
@@ -76,9 +77,7 @@ class VisionTransformer(nn.Module):
         # Classifier head
         self.head = nn.Linear(self.num_features, num_classes) if num_classes > 0 else nn.Identity()
 
-        # decide whether two patches are neighbour
-        self.neighbour_head = nn.Sequential(nn.Linear(embed_dim * 2, 512), nn.ReLU(inplace=True), nn.Linear(512, 2)) 
-        self.crosslayer_head = nn.Sequential(nn.Linear(embed_dim * 2, 512), nn.ReLU(inplace=True), nn.Linear(512, 2))
+     
         self.patch_head = nn.Linear(embed_dim, num_classes) # nn.Sequential(nn.Linear(embed_dim, 512), nn.ReLU(inplace=True), nn.Linear(512, 1000))
 
         trunc_normal_(self.pos_embed, std=.02)
@@ -114,12 +113,8 @@ class VisionTransformer(nn.Module):
         x = x + self.pos_embed
         x = self.pos_drop(x)
 
-        count = 0
         for blk in self.blocks:
             x = blk(x)
-            if self.training and count == len(self.blocks) // 2:
-                inter_x = x
-            count += 1
 
         if self.training: 
             patches = self.norm(x)[:, 1:]
@@ -133,40 +128,12 @@ class VisionTransformer(nn.Module):
             img_size = int(num_patch ** .5)
             patches = patches.permute(0, 2, 1).reshape(num_batch, num_dim, img_size, img_size)
             
-            
-            if random.randint(0, 1) == 0:
-                ind = (random.randint(0, img_size-2), random.randint(0, img_size-1))
-                pos_ind = (ind[0]+1, ind[1])
-            else:
-                ind = (random.randint(0, img_size-1), random.randint(0, img_size-2))
-                pos_ind = (ind[0], ind[1]+1)
-            neg_ind = (random.randint(0, img_size-1), random.randint(0, img_size-1))
-            
-            center = patches[:, :, ind[0], ind[1]].reshape(num_batch, num_dim)
-            pos = patches[:, :, pos_ind[0], pos_ind[1]].reshape(num_batch, num_dim)
-            neg = patches[:, :, neg_ind[0], neg_ind[1]].reshape(num_batch, num_dim)
-            input_data = torch.cat((torch.cat((center, pos), dim=1), torch.cat((center, neg), dim=1)), dim=0)
-            p_label = torch.cat((torch.ones_like(pos[:, 0]), torch.zeros_like(neg[:, 0])), dim=0).long()
-            relation_loss =  F.cross_entropy(self.neighbour_head(input_data),  p_label)
-            
-            # calculate crosslayer loss
-            inter_patches = inter_x[:, 1:]
-            inter_patches = inter_patches.permute(0, 2, 1).reshape(num_batch, num_dim, img_size, img_size)
-            ind = (random.randint(0, img_size-1), random.randint(0, img_size-1))
-            neg_ind = (random.randint(0, img_size-1), random.randint(0, img_size-1))
-            center = inter_patches[:, :, ind[0], ind[1]].reshape(num_batch, num_dim)
-            pos = patches[:, :, ind[0], ind[1]].reshape(num_batch, num_dim).detach()
-            neg = inter_patches[:, :, neg_ind[0], neg_ind[1]].reshape(num_batch, num_dim)
-
-            input_data = torch.cat((torch.cat((center, pos), dim=1), torch.cat((center, neg), dim=1)), dim=0)
-            p_label = torch.cat((torch.ones_like(pos[:, 0]), torch.zeros_like(neg[:, 0])), dim=0).long()
-            crosslayer_loss = F.cross_entropy(self.crosslayer_head(input_data),  p_label)
-            return x, patches, relation_loss + crosslayer_loss 
+            return x, patches
         return x
 
     def forward(self, x, aux_class=None):
         if self.training:
-            x, patches, r_loss = self.forward_features(x)
+            x, patches = self.forward_features(x)
             # aux_class_left, aux_class_right, pixel_ind = aux_class
             num_batch, num_dim, img_size = patches.shape[0], patches.shape[1], patches.shape[-1] # // 2
             
@@ -174,10 +141,10 @@ class VisionTransformer(nn.Module):
             patch_loss = 0.
             for _ in range(len(mask_lst)):
                 avgpool_patches = (patches * mask_lst[_].reshape(1, 1, img_size, img_size)).mean(dim=(2, 3))
-                patch_loss += mask_lst[_].sum() / torch.ones_like(mask_lst[_]).sum() * nn.KLDivLoss(reduction='batchmean')(F.log_softmax(self.patch_head(avgpool_patches), dim=-1), target_lst[_])
+                patch_loss += mask_lst[_].sum() / torch.ones_like(mask_lst[_]).sum() * nn.KLDivLoss(reduction='batchmean')(F.log_softmax(self.patch_head(self.drop(avgpool_patches)), dim=-1), target_lst[_])
 
-            x = self.head(x)
-            return x, r_loss + patch_loss * 4.
+            x = self.head(self.drop(x))
+            return x, patch_loss 
         else:
             x = self.forward_features(x)
             x = self.head(x)
