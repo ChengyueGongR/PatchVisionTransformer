@@ -202,19 +202,35 @@ class VisionTransformer(nn.Module):
             num_batch, num_dim, img_size = patches.shape[0], patches.shape[1], patches.shape[-1] # // 2
             
             target_lst, mask_lst = aux_class
+            
+            def similarity(patches, context_target):
+                low_k, high_k = 5, 7
+                low_order = F.avg_pool2d(patches, kernel_size=low_k, stride=1, padding=(low_k - 1) // 2) - patches / (low_k ** 2)
+                low_order *= (low_k ** 2 * 1.0) / (low_k ** 2 - 1.)
+                high_order = patches.mean(dim=(2, 3))
+                
+                pos_l = (context_target * patches.reshape(num_batch, num_dim, -1).permute(0, 2, 1)).sum(-1).reshape(-1, 1)
+                neg_l = (context_target * high_order.reshape(num_batch, num_dim, -1).permute(0, 2, 1)).sum(-1).reshape(-1, 1)
+                neg2_l = (context_target * low_order.reshape(num_batch, num_dim, -1).permute(0, 2, 1)).sum(-1).reshape(-1, 1)
+
+                # neg_l = torch.cat([(context_target * high_order[:, torch.randperm(high_order.shape[1]).cuda()]).sum(-1).reshape(-1, 1) for _ in range(40)], dim=-1)
+                return - torch.log(torch.cat((pos_l, neg_l, neg2_l), dim=-1).softmax(dim=-1)[:, 0] + 1e-8).mean()
+            
+            sim_loss = similarity(patches, context_target.detach()) 
+            
             patch_loss = 0.
             for _ in range(len(mask_lst)):
                 avgpool_patches = (patches * mask_lst[_].reshape(1, 1, img_size, img_size)).mean(dim=(2, 3))
                 patch_loss += mask_lst[_].sum() / torch.ones_like(mask_lst[_]).sum() * torch.sum(-target_lst[_] * (1e-8 + logits.softmax(dim=-1)).log(), dim=-1).mean()
                 # patch_loss += mask_lst[_].sum() / torch.ones_like(mask_lst[_]).sum() * nn.KLDivLoss(reduction='batchmean')(F.log_softmax(self.patch_head(self.drop(avgpool_patches)), dim=-1), target_lst[_])
                 
-                if _ == 0:
-                    left_term = logits.reshape(2, num_batch//2, -1)[0] 
-                    right_term = logits.reshape(2, num_batch//2, -1)[1] 
-                    repeat_loss = (left_term - right_term).norm(dim=-1).mean()
+#                 if _ == 0:
+#                     left_term = logits.reshape(2, num_batch//2, -1)[0] 
+#                     right_term = logits.reshape(2, num_batch//2, -1)[1] 
+#                     repeat_loss = (left_term - right_term).norm(dim=-1).mean()
                     
             x = self.head(self.drop(x))
-            return x, patch_loss + repeat_loss * .1 
+            return x, patch_loss + sim_loss * .2
         else:
             x = self.forward_features(x)
             x = self.head(x)
