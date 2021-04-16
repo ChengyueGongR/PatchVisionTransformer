@@ -90,6 +90,31 @@ def two_mix(samples, targets, num_patch=14, local_consist=7):
     new_targets = targets * mix_rate + targets[img_index] * (1 - mix_rate)
     return new_samples, new_targets, ([targets, targets[img_index]], [mask, 1 - mask])
 
+
+def repeat_two_mix(samples, targets, num_patch=14, repeat=2):
+    mask = torch.rand(num_patch, num_patch).cuda()
+    lam = np.random.beta(1., 1.)
+    lam = max(max(lam, 1 - lam), 0.8)
+
+    # lam = .5 # + np.random.randint(-10, 10) / 40. 
+
+    mask = generate_mask(mask, num_patch, lam)
+    mix_rate = mask.sum() / num_patch ** 2
+    img_index = torch.randperm(samples.shape[0])
+    repeat_index = torch.randperm(samples.shape[0])
+
+    num_batch, num_channel, img_size = samples.shape[0], samples.shape[1], samples.shape[2]
+    patch_size = img_size // num_patch
+    new_samples = samples.reshape(num_batch, num_channel, num_patch, patch_size, num_patch, patch_size)
+    repeat_samples = torch.cat((new_samples[repeat_index][:num_batch//2], new_samples[repeat_index][:num_batch//2]), dim=0)
+    repeat_targets = torch.cat((targets[repeat_index][:num_batch//2], targets[repeat_index][:num_batch//2]), dim=0)
+
+    new_samples = repeat_samples * mask.reshape(1, 1, num_patch, 1, num_patch, 1) + new_samples[img_index] * (1 - mask.reshape(1, 1, num_patch, 1, num_patch, 1) )
+    new_samples = new_samples.reshape(num_batch, num_channel, img_size, img_size)
+    new_targets = repeat_targets * mix_rate + targets[img_index] * (1 - mix_rate)
+    return new_samples, new_targets, mix_rate, ([repeat_targets, targets[img_index]], [mask, 1 - mask], new_targets) # img_index)
+
+
 def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
                     device: torch.device, epoch: int, loss_scaler, max_norm: float = 0,
@@ -108,7 +133,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
         if mixup_fn is not None:
             samples, targets = mixup_fn(samples, targets)
         
-        samples, targets, aux_targets = two_mix(samples, targets, num_patch=samples.shape[-1] // 16)
+        samples, targets, aux_targets = repeat_two_mix(samples, targets, num_patch=samples.shape[-1] // 16)
         # samples, targets, aux_targets = multi_mix(samples, targets, num_patch=samples.shape[-1] // 16)
 
         with torch.cuda.amp.autocast():
