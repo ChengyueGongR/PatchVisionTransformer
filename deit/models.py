@@ -41,7 +41,6 @@ class Attention(nn.Module):
         self.attn_drop = 0. # AttentionDrop()
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
-        self.bias_proj = nn.Sequential(nn.Linear(head_dim * 2, head_dim // 2), nn.ReLU(inplace=True), nn.Linear(head_dim // 2, 3))
 
     def forward(self, x, prev_attn):
         B, N, C = x.shape
@@ -49,15 +48,8 @@ class Attention(nn.Module):
         q, k, v = qkv[0], qkv[1], qkv[2]   # make torchscript happy (cannot use tensor as tuple)
 
         attn = (q @ k.transpose(-2, -1)) * self.scale
-
-        bias = self.bias_proj( torch.cat((q, k), dim=-1).reshape(-1, C // self.num_heads * 2) )
-        bias = bias.reshape(B, self.num_heads, N, 3)
-
-        cur_attn = attn.softmax(dim=-1)
-        if prev_attn is not None:
-            attn = cur_attn * (1. + bias[:,:,:,:1].abs()) + prev_attn * (.0 + bias[:,:,:,1:2].abs()) + torch.ones_like(cur_attn) / cur_attn.shape[-1] * (-bias[:,:,:,2:].abs())
-        else:
-            attn = cur_attn * (1 + bias.mean() * 0.)
+          attn = attn.softmax(dim=-1)
+        
         x = (attn @ v).transpose(1, 2).reshape(B, N, C)
         x = self.proj(x)
         x = self.proj_drop(x)
@@ -77,11 +69,10 @@ class Block(nn.Module):
         mlp_hidden_dim = int(dim * mlp_ratio)
         self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
         
-    def forward(self, x, prev_attn):
-        post_x, attn = self.attn(self.norm1(x), prev_attn)
-        x = x + self.drop_path(post_x)
+    def forward(self, x):
+        x = x + self.drop_path(self.attn(self.norm1(x)))
         x = x + self.drop_path(self.mlp(self.norm2(x)))
-        return x, attn
+        return x
     
 class VisionTransformer(nn.Module):
     """ Vision Transformer
@@ -186,9 +177,8 @@ class VisionTransformer(nn.Module):
         x = x + self.pos_embed
         x = self.pos_drop(x)
         
-        prev_attn = None
         for blk in self.blocks:
-            x, prev_attn = blk(x, prev_attn)
+            x = blk(x)
 
         if self.training: 
             patches = self.norm(x)[:, 1:]
@@ -215,10 +205,16 @@ class VisionTransformer(nn.Module):
             patch_loss = 0.
             for _ in range(len(mask_lst)):
                 avgpool_patches = (patches * mask_lst[_].reshape(1, 1, img_size, img_size)).mean(dim=(2, 3))
-                patch_loss += mask_lst[_].sum() / torch.ones_like(mask_lst[_]).sum() * nn.KLDivLoss(reduction='batchmean')(F.log_softmax(self.patch_head(self.drop(avgpool_patches)), dim=-1), target_lst[_])
-
+                patch_loss += mask_lst[_].sum() / torch.ones_like(mask_lst[_]).sum() * torch.sum(-target_lst[_] * (1e-8 + logits.softmax(dim=-1)).log(), dim=-1).mean()
+                # patch_loss += mask_lst[_].sum() / torch.ones_like(mask_lst[_]).sum() * nn.KLDivLoss(reduction='batchmean')(F.log_softmax(self.patch_head(self.drop(avgpool_patches)), dim=-1), target_lst[_])
+                
+                if _ == 0:
+                    left_term = logits.reshape(2, num_batch//2, -1)[0] 
+                    right_term = logits.reshape(2, num_batch//2, -1)[1] 
+                    repeat_loss = (left_term - right_term).norm(dim=-1).mean()
+                    
             x = self.head(self.drop(x))
-            return x, patch_loss 
+            return x, patch_loss + repeat_loss * .1 
         else:
             x = self.forward_features(x)
             x = self.head(x)
