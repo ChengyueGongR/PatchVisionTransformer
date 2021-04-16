@@ -133,8 +133,8 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
         if mixup_fn is not None:
             samples, targets = mixup_fn(samples, targets)
         
-        samples, targets, aux_targets = repeat_two_mix(samples, targets, num_patch=samples.shape[-1] // 16)
-        # samples, targets, aux_targets = multi_mix(samples, targets, num_patch=samples.shape[-1] // 16)
+        # samples, targets, aux_targets = repeat_two_mix(samples, targets, num_patch=samples.shape[-1] // 16)
+        samples, targets, aux_targets = multi_mix(samples, targets, num_patch=samples.shape[-1] // 16)
 
         with torch.cuda.amp.autocast():
             outputs, r_loss = model(samples, aux_targets)
