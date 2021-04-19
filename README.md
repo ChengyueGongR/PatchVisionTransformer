@@ -3,8 +3,9 @@
 
 Changes:
 1. in `timm_talk/timm/models/vision_transformer.py`, an additional dropout is added to the classification head.
-2. in `timm_talk/timm/utils/cuda.py`, the default `clip norm` is set to 5.
-3. drop path, ema, and augmentation is changed.
+2. in `timm_talk/timm/models/vision_transformer.py`, talking head attention is added to the attention layer.
+3. in `timm_talk/timm/utils/cuda.py`, the default `clip norm` is set to 5.
+4. drop path, ema, and augmentation is changed.
 
 cd `timm_talk`
 
