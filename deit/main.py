@@ -9,8 +9,8 @@ import torch.backends.cudnn as cudnn
 import json
 
 from pathlib import Path
+from copy import deepcopy
 
-from ptflops import get_model_complexity_info
 from timm.data import Mixup
 from timm.models import create_model
 from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
@@ -30,6 +30,7 @@ def get_args_parser():
     parser = argparse.ArgumentParser('DeiT training and evaluation script', add_help=False)
     parser.add_argument('--batch-size', default=64, type=int)
     parser.add_argument('--epochs', default=300, type=int)
+
     # Model parameters
     parser.add_argument('--model', default='deit_base_patch16_224', type=str, metavar='MODEL',
                         help='Name of model to train')
@@ -72,7 +73,7 @@ def get_args_parser():
                         help='learning rate noise std-dev (default: 1.0)')
     parser.add_argument('--warmup-lr', type=float, default=1e-6, metavar='LR',
                         help='warmup learning rate (default: 1e-6)')
-    parser.add_argument('--min-lr', type=float, default=1e-5, metavar='LR',
+    parser.add_argument('--min-lr', type=float, default=1e-7, metavar='LR',
                         help='lower lr bound for cyclic schedulers that hit 0 (1e-5)')
 
     parser.add_argument('--decay-epochs', type=float, default=30, metavar='N',
@@ -132,6 +133,9 @@ def get_args_parser():
     parser.add_argument('--distillation-alpha', default=0.5, type=float, help="")
     parser.add_argument('--distillation-tau', default=1.0, type=float, help="")
 
+    # * Finetuning params
+    parser.add_argument('--finetune', default='', help='finetune from checkpoint')
+
     # Dataset parameters
     parser.add_argument('--data-path', default='/datasets01/imagenet_full_size/061417/', type=str,
                         help='dataset path')
@@ -147,11 +151,14 @@ def get_args_parser():
                         help='device to use for training / testing')
     parser.add_argument('--seed', default=0, type=int)
     parser.add_argument('--resume', default='', help='resume from checkpoint')
+    parser.add_argument('--scaleup_resume', default='', help='resume from checkpoint')
+
+    parser.add_argument('--width_scaleup_resume', default='', help='resume from checkpoint')
     parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
                         help='start epoch')
     parser.add_argument('--eval', action='store_true', help='Perform evaluation only')
     parser.add_argument('--dist-eval', action='store_true', default=False, help='Enabling distributed evaluation')
-    parser.add_argument('--num_workers', default=6, type=int)
+    parser.add_argument('--num_workers', default=10, type=int)
     parser.add_argument('--pin-mem', action='store_true',
                         help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.')
     parser.add_argument('--no-pin-mem', action='store_false', dest='pin_mem',
@@ -168,7 +175,11 @@ def get_args_parser():
 def main(args):
     utils.init_distributed_mode(args)
 
+    # args.repeated_aug = False
     print(args)
+
+    if args.distillation_type != 'none' and args.finetune and not args.eval:
+        raise NotImplementedError("Finetuning with distillation not yet supported")
 
     device = torch.device(args.device)
 
@@ -217,7 +228,7 @@ def main(args):
 
     data_loader_val = torch.utils.data.DataLoader(
         dataset_val, sampler=sampler_val,
-        batch_size=int(1 * args.batch_size),
+        batch_size=int(1. * args.batch_size), # max(64, int(1. * args.batch_size)),
         num_workers=args.num_workers,
         pin_memory=args.pin_mem,
         drop_last=False
@@ -241,8 +252,50 @@ def main(args):
         drop_block_rate=None,
     )
 
-    # TODO: finetuning
+    if args.finetune:
+        if args.finetune.startswith('https'):
+            checkpoint = torch.hub.load_state_dict_from_url(
+                args.finetune, map_location='cpu', check_hash=True)
+        else:
+            checkpoint = torch.load(args.finetune, map_location='cpu')
 
+        checkpoint_model = checkpoint['model_ema']
+        state_dict = model.state_dict()
+        '''
+        for k in ['head.weight', 'head.bias', 'head_dist.weight', 'head_dist.bias']:
+            if k in checkpoint_model and checkpoint_model[k].shape != state_dict[k].shape:
+                print(f"Removing key {k} from pretrained checkpoint")
+                del checkpoint_model[k]
+        '''
+
+        # interpolate position embedding
+        pos_embed_checkpoint = checkpoint_model['pos_embed']
+        embedding_size = pos_embed_checkpoint.shape[-1]
+        num_patches = model.patch_embed.num_patches
+        num_extra_tokens = model.pos_embed.shape[-2] - num_patches
+        # height (== width) for the checkpoint position embedding
+        orig_size = int((pos_embed_checkpoint.shape[-2] - num_extra_tokens) ** 0.5)
+        # height (== width) for the new position embedding
+        new_size = int(num_patches ** 0.5)
+        # class_token and dist_token are kept unchanged
+        extra_tokens = pos_embed_checkpoint[:, :num_extra_tokens]
+        # only the position tokens are interpolated
+        pos_tokens = pos_embed_checkpoint[:, num_extra_tokens:]
+        pos_tokens = pos_tokens.reshape(-1, orig_size, orig_size, embedding_size).permute(0, 3, 1, 2)
+        pos_tokens = torch.nn.functional.interpolate(
+            pos_tokens, size=(new_size, new_size), mode='bicubic', align_corners=False)
+        pos_tokens = pos_tokens.permute(0, 2, 3, 1).flatten(1, 2)
+        new_pos_embed = torch.cat((extra_tokens, pos_tokens), dim=1)
+        checkpoint_model['pos_embed'] = new_pos_embed
+
+        model.load_state_dict(checkpoint_model, strict=False)
+       
+        '''  
+        for name, child in model.named_children():
+            if 'blocks.23' not in name or 'head' not in name:
+                for name2, params in child.named_parameters():
+                    params.requires_grad = False
+        '''
     model.to(device)
 
     model_ema = None
@@ -256,16 +309,14 @@ def main(args):
 
     model_without_ddp = model
     if args.distributed:
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu]) # , find_unused_parameters=True)
         model_without_ddp = model.module
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print('number of params:', n_parameters)
-    print(model)
-    # print(get_model_complexity_info(model, (3, 224, 224), as_strings=True, print_per_layer_stat=True, verbose=True))
 
     linear_scaled_lr = args.lr * args.batch_size * utils.get_world_size() / 512.0
     args.lr = linear_scaled_lr
-    optimizer = create_optimizer(args, model)
+    optimizer = create_optimizer(args, model_without_ddp)
     loss_scaler = NativeScaler()
 
     lr_scheduler, _ = create_scheduler(args, optimizer)
@@ -281,7 +332,6 @@ def main(args):
         criterion = torch.nn.CrossEntropyLoss()
 
     teacher_model = None
-    '''
     if args.distillation_type != 'none':
         assert args.teacher_path, 'need to specify teacher-path when using distillation'
         print(f"Creating teacher model: {args.teacher_model}")
@@ -299,28 +349,7 @@ def main(args):
         teacher_model.load_state_dict(checkpoint['model'])
         teacher_model.to(device)
         teacher_model.eval()
-    '''
 
-    '''
-    # teacher
-    from torchvision.models.resnet import ResNet, Bottleneck
-    from torch.hub import load_state_dict_from_url
-    teacher_model0 = ResNet(Bottleneck, [3, 4, 23, 3], groups=32, width_per_group=16)
-    state_dict = load_state_dict_from_url('https://download.pytorch.org/models/ig_resnext101_32x16-c6f796b0.pth')
-    teacher_model0.load_state_dict(state_dict)
-    teacher_model0.to(device)
-    teacher_model0.eval()
-    teacher_model = [teacher_model0, teacher_model]
-
-    '''
-    
-    '''
-    import timm
-    # teacher_model = [timm.create_model('gluon_senet154'.lower(), pretrained=True).to(device), timm.create_model('gluon_resnet152_v1s'.lower(), pretrained=True).to(device)] 
-    teacher_model = [timm.create_model('gluon_senet154'.lower(), pretrained=True).to(device), teacher_model] 
-    teacher_model[0].eval()
-    teacher_model[1].eval()
-    ''' 
     # wrap the criterion in our custom DistillationLoss, which
     # just dispatches to the original criterion if args.distillation_type is 'none'
     criterion = DistillationLoss(
@@ -334,25 +363,89 @@ def main(args):
                 args.resume, map_location='cpu', check_hash=True)
         else:
             checkpoint = torch.load(args.resume, map_location='cpu')
+
+        model_without_ddp.load_state_dict(checkpoint['model_ema'], strict=False)
+        model_ema.ema = deepcopy(model_without_ddp)
         model_without_ddp.load_state_dict(checkpoint['model'], strict=False)
         if not args.eval and 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint:
-            optimizer.load_state_dict(checkpoint['optimizer'])
+            # optimizer.load_state_dict(checkpoint['optimizer'])
             # lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
-            # args.start_epoch = checkpoint['epoch'] + 1
+            args.start_epoch = checkpoint['epoch'] + 1 # - 10
+
             if args.model_ema:
                 utils._load_checkpoint_for_ema(model_ema, checkpoint['model_ema'])
+            if 'scaler' in checkpoint:
+                loss_scaler.load_state_dict(checkpoint['scaler'])
+    ''' 
+    if args.width_scaleup_resume:
+        checkpoint = torch.load(args.width_scaleup_resume, map_location='cpu')
+        old_checkpoint_model = checkpoint['model']
+        depth = len(model_without_ddp.blocks)
+        name_lst = []
+        for item in old_checkpoint_model.keys():
+            if 'blocks.0.' in item:
+                name_lst.append(item[9:])
+        checkpoint_model = {}
+        
+        for block_ind in range(depth):
+            for name in name_lst:
+                module_name = 'blocks.' + str(block_ind) + '.' + name
+                # calculate new parameters
+                weight = old_checkpoint_model[module_name]
+                random = torch.randn_like(weight) * 1e-2
+                checkpoint_model[module_name] = torch.cat((weight /2.  + random, weight / 2. - random), dim=0)
+                
+                weight = checkpoint_model[module_name]
+                random = torch.randn_like(weight) * 1e-2
+                checkpoint_model[module_name] = torch.cat((weight /2.  + random, weight / 2. - random), dim=1)
 
+        model_without_ddp.load_state_dict(checkpoint_model, strict=False)
+    '''
+    if args.scaleup_resume:
+        checkpoint = torch.load(args.scaleup_resume, map_location='cpu')
+        # map the index
+        checkpoint_model = checkpoint['model']
+        depth = len(model_without_ddp.blocks)
+        name_lst = []
+        for item in checkpoint['model'].keys():
+            if 'blocks.0.' in item:
+                name_lst.append(item[9:])
+
+        for block_ind in range(1, depth + 1):
+            reverse_ind = depth - block_ind
+            for name in name_lst:
+                module_name = 'blocks.' + str(reverse_ind) + '.' + name
+                old_module_name = 'blocks.' + str(reverse_ind // 2) + '.' + name
+                checkpoint_model[module_name] = checkpoint_model[old_module_name]
+        '''
+        for block_ind in range(depth):
+            for name in name_lst:
+                module_name = 'blocks.' + str(block_ind) + '.' + name
+                if block_ind < depth // 2:
+                    old_module_name = 'blocks.' + str(block_ind) + '.' + name
+                else:
+                    old_module_name = 'blocks.' + str(depth // 2 - 1) + '.' + name
+                checkpoint_model[module_name] = checkpoint_model[old_module_name]
+        for name, child in model.named_children():
+            for block_ind in range(depth // 2):
+                if 'blocks.' + str(block_ind) in name:
+                    for name2, params in child.named_parameters():
+                        params.requires_grad = False
+        '''
+        model_without_ddp.load_state_dict(checkpoint_model)
     if args.eval:
         test_stats = evaluate(data_loader_val, model, device)
         print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
         return
 
-    print("Start training")
+    # model_ema.ema = deepcopy(model_without_ddp)
+    print(f"Start training for {args.epochs} epochs")
     start_time = time.time()
     max_accuracy = 0.0
     for _ in range(0, args.start_epoch):
         lr_scheduler.step(_)
-
+    # test_stats = evaluate(data_loader_val, model_ema.ema, device)
+    # test_stats = evaluate(data_loader_val, model, device)
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
@@ -361,8 +454,8 @@ def main(args):
             model, criterion, data_loader_train,
             optimizer, device, epoch, loss_scaler,
             args.clip_grad, model_ema, mixup_fn,
-            teacher=teacher_model,
-            )
+            set_training_mode=args.scaleup_resume == ''  # keep in eval mode during finetuning
+        )
 
         lr_scheduler.step(epoch)
         if args.output_dir:
@@ -374,10 +467,16 @@ def main(args):
                     'lr_scheduler': lr_scheduler.state_dict(),
                     'epoch': epoch,
                     'model_ema': get_state_dict(model_ema),
+                    'scaler': loss_scaler.state_dict(),
                     'args': args,
                 }, checkpoint_path)
 
-        test_stats = evaluate(data_loader_val, model, device)
+        #if epoch % 3 != 0:
+        #    continue
+        if epoch % 1 == 0 or args.start_epoch == epoch:
+            test_stats = evaluate(data_loader_val, model, device)
+        if epoch % 50 == 0 and epoch >= 200:
+            test_stats = evaluate(data_loader_val, model_ema.ema, device)#, True)
         print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
         max_accuracy = max(max_accuracy, test_stats["acc1"])
         print(f'Max accuracy: {max_accuracy:.2f}%')
