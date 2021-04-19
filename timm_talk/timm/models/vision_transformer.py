@@ -140,8 +140,6 @@ class AttentionDrop(nn.Module):
         super().__init__()
         self.drop_rate = drop_rate
     def generate_mask(self, num_token, seed=None):
-
-
         '''
         column = 2
         width = int(num_token ** .5)
@@ -485,9 +483,8 @@ class VisionTransformer(nn.Module):
         B = x.shape[0]
         x = self.emb_drop(self.patch_embed(x))
          
-        # x = F.adaptive_avg_pool2d(x.reshape(B, 672//16, 672//16, -1).permute(0, 3, 1, 2), (512//16, 512//16)).reshape(B, -1, (512//16) **2).permute(0, 2, 1)
         if self.training:
-            context_target = x# .detach()
+            context_target = x.detach()
 
         cls_tokens = self.cls_token.expand(B, -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
         x = torch.cat((cls_tokens, x), dim=1)
@@ -495,12 +492,8 @@ class VisionTransformer(nn.Module):
         x = self.pos_drop(x)
 
         proj = 0.
-        count = 0
         for blk in self.blocks:
             x, _ = blk(x)
-            if count == len(self.blocks) // 2:
-                inter_patches = x[:, 1:, :]
-            count += 1
             proj += _
 
         patches = self.norm(x)[:, 1:]
@@ -514,7 +507,7 @@ class VisionTransformer(nn.Module):
             num_batch, num_patch, num_dim = patches.size()
             img_size = int(num_patch ** .5)
             patches = patches.permute(0, 2, 1).reshape(num_batch, num_dim, img_size, img_size)
-            return x, patches, 0., proj, context_target, inter_patches.permute(0, 2, 1).reshape(num_batch, num_dim, img_size, img_size)
+            return x, patches, 0., proj, context_target
         
         num_batch, num_patch, num_dim = patches.size()
         img_size = int(num_patch ** .5)
@@ -522,56 +515,36 @@ class VisionTransformer(nn.Module):
 
         return x, patches
 
-    def forward(self, x, aux_class=None, return_x=True):
+    def forward(self, x, aux_class=None):
         if self.training:
-            x, patches, r_loss, proj, context_target, inter_patches = self.forward_features(x)
+            x, patches, r_loss, proj, context_target = self.forward_features(x)
             # x, patches, patch, r_loss = self.forward_features(x)
             aux_class_left, aux_class_right, pixel_ind = aux_class
             num_batch, num_dim, img_size = patches.shape[0], patches.shape[1], patches.shape[-1] # // 2
             
             def similarity(patches, context_target):
                 # high_order = patches
-
-                # '''
-                low_k, high_k = 5, 7
+                low_k = 5
                 low_order = F.avg_pool2d(patches, kernel_size=low_k, stride=1, padding=(low_k - 1) // 2) - patches / (low_k ** 2)
                 low_order *= (low_k ** 2 * 1.0) / (low_k ** 2 - 1.)
                 high_order = patches.mean(dim=(2, 3))
                 # high_order = F.avg_pool2d(patches, kernel_size=high_k, stride=1, padding=(high_k - 1) // 2) - patches / (high_k ** 2)
                 # high_order *= (high_k ** 2 * 1.0) / (high_k ** 2 - 1.)
-                # '''
 
-                
-                # context_target = F.normalize(context_target, dim=-1)# .reshape(-1, num_dim)
-                # high_order = F.normalize(high_order, dim=-1) # .reshape(num_batch, num_dim, -1).permute(0, 2, 1), dim=-1)# .reshape(-1, num_dim)
-                
                 pos_l = (context_target * patches.reshape(num_batch, num_dim, -1).permute(0, 2, 1)).sum(-1).reshape(-1, 1)
                 neg_l = (context_target * high_order.reshape(num_batch, num_dim, -1).permute(0, 2, 1)).sum(-1).reshape(-1, 1)
                 neg2_l = (context_target * low_order.reshape(num_batch, num_dim, -1).permute(0, 2, 1)).sum(-1).reshape(-1, 1)
-
                 # neg_l = torch.cat([(context_target * high_order[:, torch.randperm(high_order.shape[1]).cuda()]).sum(-1).reshape(-1, 1) for _ in range(40)], dim=-1)
-
                 return - torch.log(torch.cat((pos_l, neg_l, neg2_l), dim=-1).softmax(dim=-1)[:, 0] + 1e-8).mean()
-                
-                
-                #neg_l = [torch.log( 1e-8 + (context_target * high_order[:, torch.randperm(high_order.shape[1]).cuda()]).sum(-1).sigmoid() ).mean() for _ in range(5)] 
-                #pos_l = - torch.log( 1e-8 + (context_target * high_order).sum(-1).sigmoid() ).mean()
-                #return pos_l + sum(neg_l) / len(neg_l)
-                
-                # return - (context_target * high_order).sum(-1).mean()
+
             
-            sim_loss = similarity(patches, context_target.detach()) # inter_patches.reshape(num_batch, num_dim, -1).permute(0, 2, 1)) # context_target)
-            # sim_loss = similarity(context_target.detach(), inter_patches.reshape(num_batch, num_dim, -1).permute(0, 2, 1))
-            # sim_loss += similarity(inter_patches.reshape(num_batch, num_dim, -1).permute(0, 2, 1).detach(), patches.reshape(num_batch, num_dim, -1).permute(0, 2, 1))
-            # sim_loss = similarity(context_target.detach(), patches.reshape(num_batch, num_dim, -1).permute(0, 2, 1))#, context_target) # + similarity(inter_patches, patches.reshape(num_batch, num_dim, -1).permute(0, 2, 1)) # , context_target)
-            
+            sim_loss = similarity(patches, context_target.detach()) 
             target_lst, mask_lst, targets = aux_class
             patch_loss = 0.
             for _ in range(len(mask_lst)):
                 avgpool_patches = (patches * mask_lst[_].reshape(1, 1, img_size, img_size)).mean(dim=(2, 3)) * torch.ones_like(mask_lst[_]).sum() / (mask_lst[_].sum() + 1e-4)
                 
                 logits = self.patch_head(self.drop(avgpool_patches))
-                # patch_loss += mask_lst[_].sum() / torch.ones_like(mask_lst[_]).sum() * torch.sum(-target_lst[_] * (1e-8 + logits.softmax(dim=-1)).log(), dim=-1).mean() 
                 patch_loss += mask_lst[_].sum() / torch.ones_like(mask_lst[_]).sum() * nn.KLDivLoss(reduction='batchmean')((1e-8 + logits.softmax(dim=-1)).log(), target_lst[_])
             
                 '''
@@ -584,23 +557,13 @@ class VisionTransformer(nn.Module):
                 '''
             x = self.head(self.drop(x))
 
-            if return_x:
-                return x
-            return x, r_loss * 0. + patch_loss, sim_loss, proj # +0*repeat_loss, proj # + repeat_loss * 2. # + cutmix_loss * 2. # + sim_loss * 2e-2
-
-            # return x.softmax(dim=-1), r_loss * 0. + patch_loss * 4. + repeat_loss * 1. # + sim_loss * 2e-2
+            return x, r_loss * 0. + patch_loss, sim_loss, proj
         else:
             x, patches = self.forward_features(x)
             
             x = self.head(x)
-            if return_x:
-                return x
-            
-            # logits = ( self.patch_head(patches.mean(dim=(2, 3))) + x ).softmax(dim=-1)
             logits = self.patch_head(patches.mean(dim=(2, 3))).softmax(dim=-1) + x.softmax(dim=-1)
-
-            return x.softmax(dim=-1).log(), logits # self.patch_head(patches.mean(dim=(2, 3))).softmax(dim=-1) + x.softmax(dim=-1)
-            # return x.softmax(dim=-1).log(), (self.patch_head(patches.mean(dim=(2, 3))) + x).softmax(dim=-1)
+            return x.softmax(dim=-1).log(), logits 
 
 
 class DistilledVisionTransformer(VisionTransformer):
