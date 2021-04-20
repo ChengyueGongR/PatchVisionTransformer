@@ -524,9 +524,9 @@ class VisionTransformer(nn.Module):
             
             def similarity(patches, context_target):
                 # high_order = patches
-                low_k = 5
-                low_order = F.avg_pool2d(patches, kernel_size=low_k, stride=1, padding=(low_k - 1) // 2) - patches / (low_k ** 2)
-                low_order *= (low_k ** 2 * 1.0) / (low_k ** 2 - 1.)
+                low_k, high_k = 3, 7
+                low_order = F.avg_pool2d(patches, kernel_size=high_k, stride=1, padding=(high_k - 1) // 2) - F.avg_pool2d(patches, kernel_size=low_k, stride=1, padding=(low_k - 1) // 2)  
+                low_order *= (high_k ** 2 * 1.0) / (high_k ** 2 - low_k ** 2)
                 high_order = patches.mean(dim=(2, 3))
                 # high_order = F.avg_pool2d(patches, kernel_size=high_k, stride=1, padding=(high_k - 1) // 2) - patches / (high_k ** 2)
                 # high_order *= (high_k ** 2 * 1.0) / (high_k ** 2 - 1.)
