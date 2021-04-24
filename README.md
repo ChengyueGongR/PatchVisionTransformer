@@ -19,3 +19,16 @@ cd `../deit`
 train: `python -m torch.distributed.launch --nproc_per_node=8 --master_port=1511 --use_env main.py --model deit_base_patch16_224 --aa rand-m9-mstd0.5-inc1 --input-size 224 --batch-size 72 --num_workers 2 --data-path /scratch/cluster/dilin/datasets/imagenet --no-repeated-aug --output_dir /scratch/cluster/cygong/vision_transformer_base_talk --smoothing 1e-1 --weight-decay 5e-2 --lr 5e-4 --epochs 300 --model-ema-decay 0.99998 --drop-path 0.5 --drop .0 --mixup .0 --mixup-switch-prob 0.0`
 
 train for longer time: `python -m torch.distributed.launch --nproc_per_node=8 --master_port=1511 --use_env main.py --model deit_base_patch16_224 --aa rand-m9-mstd0.5-inc1 --input-size 224 --batch-size 72 --num_workers 2 --data-path /scratch/cluster/dilin/datasets/imagenet --no-repeated-aug --output_dir /scratch/cluster/cygong/vision_transformer_base_talk --smoothing 1e-1 --weight-decay 5e-2 --lr 5e-4 --start_epoch 300 --epochs 400 --model-ema-decay 0.99998 --drop-path 0.8 --drop .0 --mixup .0 --mixup-switch-prob 0.0 --resume /scratch/cluster/cygong/vision_transformer_base_talk/checkpoint.pth `
+
+
+# Model Zoo
+
+We provide baseline DeiT models pretrained on ImageNet 2012.
+
+| name | acc@1 | acc@5 | #params | url |
+| --- | --- | --- | --- | --- |
+| DeiT-B12 | 82.9 | 96.3 | 86M | [model](https://drive.google.com/file/d/1NEx-fY6q3UvphJItqABCr2DRjzcReCeO/view?usp=sharing) |
+| DeiT-B24 | 83.3 | 96.4 | 172M| [model](https://drive.google.com/file/d/1TKG7UIQvFTpoMMLffwYEhYDPoCyzXDhu/view?usp=sharing) |
+| DeiT-B12-384 | 84.2 | 97.0 | 86M | [model](https://drive.google.com/file/d/1ps-DDxjtbS9fdbSspl-LKScs_IZENKaG/view?usp=sharing) |
+
+
