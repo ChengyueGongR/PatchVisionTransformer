@@ -99,12 +99,7 @@ def two_mix(samples, targets, num_patch=14, local_consist=7):
     # generate mask num_path * num_patch
     mask = torch.rand(num_patch, num_patch).cuda()
     lam = np.random.beta(1., 1.) 
-    # lam = .5 # + np.random.randint(-10, 10) / 40. 
-    # lam = max(lam, 1 - lam)
     mask = generate_mask(mask, num_patch, lam)
-    #mask = torch.where(mask > torch.ones_like(mask) * (1 - mix_rate), torch.ones_like(mask), torch.zeros_like(mask))
-    #mask = mask.reshape(num_patch // local_consist, local_consist, num_patch // local_consist, local_consist)
-    #mask = mask[:, :1, :, :1].repeat(1, local_consist, 1, local_consist).reshape(num_patch, num_patch)
     
     mix_rate = mask.sum() / num_patch ** 2
     img_index = torch.randperm(samples.shape[0])
@@ -112,9 +107,7 @@ def two_mix(samples, targets, num_patch=14, local_consist=7):
 
     num_batch, num_channel, img_size = samples.shape[0], samples.shape[1], samples.shape[2]
     patch_size = img_size // num_patch
-    new_samples = samples.reshape(num_batch, num_channel, num_patch, patch_size, num_patch, patch_size)# .permute(0, 1, 3, 5, 2, 4)
-
-    # new_samples = samples.reshape(num_batch, num_channel, patch_size, num_patch, patch_size, num_patch).permute(0, 1, 2, 4, 3, 5)
+    new_samples = samples.reshape(num_batch, num_channel, num_patch, patch_size, num_patch, patch_size)
     new_samples = new_samples * mask.reshape(1, 1, num_patch, 1, num_patch, 1) + new_samples[img_index] * (1 - mask.reshape(1, 1, num_patch, 1, num_patch, 1) )
     new_samples = new_samples.reshape(num_batch, num_channel, img_size, img_size)
     new_targets = targets * mix_rate + targets[img_index] * (1 - mix_rate)
@@ -127,12 +120,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
     # TODO fix this for finetuning
     # model.train(set_training_mode)
     model.train()
-    '''
-    if not set_training_mode:
-        # check
-        for block_ind in range(len(model.module.blocks) // 2):
-            model.module.blocks[block_ind].eval()
-    '''
+
     metric_logger = utils.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
     header = 'Epoch: [{}]'.format(epoch)
@@ -145,20 +133,9 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
         if mixup_fn is not None:
             samples, targets = mixup_fn(samples, targets)
 
-        '''
-        # adversarial examples
-        adversarial_samples = atk(samples, targets.max(dim=-1)[1])
-        samples = torch.cat((samples, adversarial_samples), dim=0)
-        targets = torch.cat((targets, targets), dim=0)
-        '''
-
-        # samples, targets, mix_rate, aux_targets = multi_mix(samples, targets, num_patch=samples.shape[-1] // 16)
-        # samples, targets, mix_rate, aux_targets = multi_mix(samples, targets, num_patch=samples.shape[-1] // 16, num_mix=8)
-        # samples, targets, mix_rate, aux_targets = repeat_two_mix(samples, targets, num_patch=samples.shape[-1] // 16)
         samples, targets, mix_rate, aux_targets = two_mix(samples, targets, num_patch=samples.shape[-1] // 16)
         
-        # alpha_rate = .75
-        # mix_rate = .5 * alpha_rate + mix_rate * (1. - alpha_rate) 
+ 
         with torch.cuda.amp.autocast():
             # outputs, r_loss = model(samples)
             outputs, r_loss, s_loss, proj = model(samples, aux_targets)
@@ -204,10 +181,6 @@ def evaluate(data_loader, model, device):
     # switch to evaluation mode
     model.eval()
     
-    #import timm
-    #teacher_model = timm.create_model('gluon_senet154'.lower(), pretrained=True).to(device)
-    # teacher_model = timm.create_model('mobilenetv2_100'.lower(), pretrained=True).to(device)
-    #teacher_model.eval()
     for images, target in metric_logger.log_every(data_loader, 100, header):
         images = images.to(device, non_blocking=True)
         target = target.to(device, non_blocking=True)
@@ -216,26 +189,18 @@ def evaluate(data_loader, model, device):
         with torch.cuda.amp.autocast():
             
             output, output2 = model(images)
-            #teacher_output = teacher_model(images)
             loss = criterion(output, target)
-            teacher_acc1, teacher_acc5 = accuracy(output2, target, topk=(1, 5))
-            #teacher_loss = criterion(teacher_output, target)
+            t_acc1, t_acc5 = accuracy(output2, target, topk=(1, 5))
+
         acc1, acc5 = accuracy(output, target, topk=(1, 5))
-        #teacher_acc1, teacher_acc5 = accuracy(teacher_output, target, topk=(1, 5))
-        '''
-        with torch.cuda.amp.autocast():
-            output = model(images)
-            loss = criterion(output, target)
-        acc1, acc5 = accuracy(output, target, topk=(1, 5))
-        '''
+
         batch_size = images.shape[0]
         metric_logger.update(loss=loss.item())
 
-        #metric_logger.meters['t_loss'].update(teacher_loss.item(), n=batch_size)
         metric_logger.meters['acc1'].update(acc1.item(), n=batch_size)
         metric_logger.meters['acc5'].update(acc5.item(), n=batch_size)
-        metric_logger.meters['t_acc1'].update(teacher_acc1.item(), n=batch_size)
-        metric_logger.meters['t_acc5'].update(teacher_acc5.item(), n=batch_size)
+        metric_logger.meters['t_acc1'].update(t_acc1.item(), n=batch_size)
+        metric_logger.meters['t_acc5'].update(t_acc5.item(), n=batch_size)
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print('* Acc@1 {top1.global_avg:.3f} Acc@5 {top5.global_avg:.3f} loss {losses.global_avg:.3f}'
@@ -243,8 +208,3 @@ def evaluate(data_loader, model, device):
 
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
-
-def selfdistill(feature, target):
-    # feature = nn.functional.normalize(feature, dim=-1)
-    # target = nn.functional.normalize(target, dim=-1)
-    return torch.norm(feature - target.detach(), dim=-1).mean()
