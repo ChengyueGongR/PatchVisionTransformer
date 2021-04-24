@@ -523,18 +523,14 @@ class VisionTransformer(nn.Module):
             num_batch, num_dim, img_size = patches.shape[0], patches.shape[1], patches.shape[-1] # // 2
             
             def similarity(patches, context_target):
-                # high_order = patches
                 low_k, high_k = 3, 7
                 low_order = F.avg_pool2d(patches, kernel_size=high_k, stride=1, padding=(high_k - 1) // 2) - F.avg_pool2d(patches, kernel_size=low_k, stride=1, padding=(low_k - 1) // 2)  
                 low_order *= (high_k ** 2 * 1.0) / (high_k ** 2 - low_k ** 2)
                 high_order = patches.mean(dim=(2, 3))
-                # high_order = F.avg_pool2d(patches, kernel_size=high_k, stride=1, padding=(high_k - 1) // 2) - patches / (high_k ** 2)
-                # high_order *= (high_k ** 2 * 1.0) / (high_k ** 2 - 1.)
 
                 pos_l = (context_target * patches.reshape(num_batch, num_dim, -1).permute(0, 2, 1)).sum(-1).reshape(-1, 1)
                 neg_l = (context_target * high_order.reshape(num_batch, num_dim, -1).permute(0, 2, 1)).sum(-1).reshape(-1, 1)
                 neg2_l = (context_target * low_order.reshape(num_batch, num_dim, -1).permute(0, 2, 1)).sum(-1).reshape(-1, 1)
-                # neg_l = torch.cat([(context_target * high_order[:, torch.randperm(high_order.shape[1]).cuda()]).sum(-1).reshape(-1, 1) for _ in range(40)], dim=-1)
                 return - torch.log(torch.cat((pos_l, neg_l, neg2_l), dim=-1).softmax(dim=-1)[:, 0] + 1e-8).mean()
 
             
@@ -547,14 +543,6 @@ class VisionTransformer(nn.Module):
                 logits = self.patch_head(self.drop(avgpool_patches))
                 patch_loss += mask_lst[_].sum() / torch.ones_like(mask_lst[_]).sum() * nn.KLDivLoss(reduction='batchmean')((1e-8 + logits.softmax(dim=-1)).log(), target_lst[_])
             
-                '''
-                if _ == 0:
-                    # left_term = logits.reshape(2, num_batch//2, -1)[0] 
-                    left_term = F.normalize(logits.reshape(2, num_batch//2, -1)[0], dim=-1)
-                    # right_term = logits.reshape(2, num_batch//2, -1)[1] 
-                    right_term = F.normalize(logits.reshape(2, num_batch//2, -1)[1], dim=-1)
-                    repeat_loss = (left_term - right_term).norm(dim=-1).mean() # / logits.shape[-1]**.5
-                '''
             x = self.head(self.drop(x))
 
             return x, r_loss * 0. + patch_loss, sim_loss, proj
@@ -1033,36 +1021,4 @@ def vit_deit_base_distilled_patch16_384(pretrained=False, **kwargs):
     model = _create_vision_transformer(
         'vit_deit_base_distilled_patch16_384', pretrained=pretrained, distilled=True, **model_kwargs)
     return model
-
-
-def reg_loss(x, tau=5e-2):
-    x_nocls = x[:, 1:, :]
-    batch_size, num_patch, num_dim = x_nocls.shape[0], x_nocls.shape[1], x_nocls.shape[2]
-    
-    # n_outputs = nn.functional.normalize(x_nocls, dim=-1)
-    n_outputs = n_outputs.transpose(1, 2).reshape(batch_size, num_dim, int(num_patch**.5), int(num_patch**.5))
-
-    width = int(num_patch**.5)
-    center = n_outputs[:, :, 1:width-1, 1:width-1].reshape(batch_size, num_dim, -1).permute(0, 2, 1)
-    pos_lst = []
-    select_lst = [(0, 2), (1, 1), (2, 0)]
-    for first_ind in range(3):
-        for second_ind in range(3):
-            if first_ind == 1 and second_ind == 1:
-                continue
-            pos_lst.append(n_outputs[:, :, select_lst[first_ind][0]:width-select_lst[first_ind][1],
-                select_lst[second_ind][0]:width-select_lst[second_ind][1]].reshape(batch_size, num_dim, -1).permute(0, 2, 1))
-    pos_pair = torch.log(1e-10 + sum([torch.exp((center * item).sum(-1)) for item in pos_lst]) / 8).reshape(batch_size, (width - 2)**2, 1)
-    # pos_pair = sum([torch.exp((center * item).sum(-1)) for item in pos_lst]).reshape(batch_size, (width - 2)**2, 1) / 8
-    center = center.reshape(batch_size, num_dim, -1).transpose(1, 2)
-
-    # neg_pair = torch.bmm(center, - center.permute(0, 2, 1))
-    random_outputs = center.reshape(-1, num_dim)[torch.randperm(batch_size * (width - 2)**2)].reshape(batch_size, (width - 2)**2, num_dim)
-    # random_outputs =  n_latent[:, :, 1:width-1, 1:width-1].reshape(batch_size, num_dim, -1).permute(0, 2, 1)
-    inbatch_neg_pair = torch.bmm(center, random_outputs.permute(0, 2, 1))
-
-    pairs = torch.cat([pos_pair, inbatch_neg_pair], dim=-1).reshape(-1, (width - 2)**2+1)
-    # pairs = torch.cat([pos_pair, neg_pair, inbatch_neg_pair], dim=-1).reshape(-1, (width - 2)**2*2+1)
-    pusdo_label = torch.zeros_like(pairs[:, 0]).reshape(-1).long()
-    return F.cross_entropy(pairs, pusdo_label) * tau
 
