@@ -100,7 +100,11 @@ def get_args_parser():
     parser.add_argument('--repeated-aug', action='store_true')
     parser.add_argument('--no-repeated-aug', action='store_false', dest='repeated_aug')
     parser.set_defaults(repeated_aug=True)
-
+    
+    parser.add_argument('--use-talk', action='store_true')
+    parser.add_argument('--no-use-talk', action='store_false', dest='use_talk')
+    parser.set_defaults(use_talk=True)
+    
     # * Random Erase params
     parser.add_argument('--reprob', type=float, default=0.25, metavar='PCT',
                         help='Random erase prob (default: 0.25)')
