@@ -151,9 +151,7 @@ def get_args_parser():
                         help='device to use for training / testing')
     parser.add_argument('--seed', default=0, type=int)
     parser.add_argument('--resume', default='', help='resume from checkpoint')
-    parser.add_argument('--scaleup_resume', default='', help='resume from checkpoint')
 
-    parser.add_argument('--width_scaleup_resume', default='', help='resume from checkpoint')
     parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
                         help='start epoch')
     parser.add_argument('--eval', action='store_true', help='Perform evaluation only')
@@ -376,63 +374,7 @@ def main(args):
                 utils._load_checkpoint_for_ema(model_ema, checkpoint['model_ema'])
             if 'scaler' in checkpoint:
                 loss_scaler.load_state_dict(checkpoint['scaler'])
-    ''' 
-    if args.width_scaleup_resume:
-        checkpoint = torch.load(args.width_scaleup_resume, map_location='cpu')
-        old_checkpoint_model = checkpoint['model']
-        depth = len(model_without_ddp.blocks)
-        name_lst = []
-        for item in old_checkpoint_model.keys():
-            if 'blocks.0.' in item:
-                name_lst.append(item[9:])
-        checkpoint_model = {}
-        
-        for block_ind in range(depth):
-            for name in name_lst:
-                module_name = 'blocks.' + str(block_ind) + '.' + name
-                # calculate new parameters
-                weight = old_checkpoint_model[module_name]
-                random = torch.randn_like(weight) * 1e-2
-                checkpoint_model[module_name] = torch.cat((weight /2.  + random, weight / 2. - random), dim=0)
-                
-                weight = checkpoint_model[module_name]
-                random = torch.randn_like(weight) * 1e-2
-                checkpoint_model[module_name] = torch.cat((weight /2.  + random, weight / 2. - random), dim=1)
-
-        model_without_ddp.load_state_dict(checkpoint_model, strict=False)
-    '''
-    if args.scaleup_resume:
-        checkpoint = torch.load(args.scaleup_resume, map_location='cpu')
-        # map the index
-        checkpoint_model = checkpoint['model']
-        depth = len(model_without_ddp.blocks)
-        name_lst = []
-        for item in checkpoint['model'].keys():
-            if 'blocks.0.' in item:
-                name_lst.append(item[9:])
-
-        for block_ind in range(1, depth + 1):
-            reverse_ind = depth - block_ind
-            for name in name_lst:
-                module_name = 'blocks.' + str(reverse_ind) + '.' + name
-                old_module_name = 'blocks.' + str(reverse_ind // 2) + '.' + name
-                checkpoint_model[module_name] = checkpoint_model[old_module_name]
-        '''
-        for block_ind in range(depth):
-            for name in name_lst:
-                module_name = 'blocks.' + str(block_ind) + '.' + name
-                if block_ind < depth // 2:
-                    old_module_name = 'blocks.' + str(block_ind) + '.' + name
-                else:
-                    old_module_name = 'blocks.' + str(depth // 2 - 1) + '.' + name
-                checkpoint_model[module_name] = checkpoint_model[old_module_name]
-        for name, child in model.named_children():
-            for block_ind in range(depth // 2):
-                if 'blocks.' + str(block_ind) in name:
-                    for name2, params in child.named_parameters():
-                        params.requires_grad = False
-        '''
-        model_without_ddp.load_state_dict(checkpoint_model)
+    
     if args.eval:
         test_stats = evaluate(data_loader_val, model, device)
         print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
@@ -444,8 +386,7 @@ def main(args):
     max_accuracy = 0.0
     for _ in range(0, args.start_epoch):
         lr_scheduler.step(_)
-    # test_stats = evaluate(data_loader_val, model_ema.ema, device)
-    # test_stats = evaluate(data_loader_val, model, device)
+
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
@@ -454,7 +395,7 @@ def main(args):
             model, criterion, data_loader_train,
             optimizer, device, epoch, loss_scaler,
             args.clip_grad, model_ema, mixup_fn,
-            set_training_mode=args.scaleup_resume == ''  # keep in eval mode during finetuning
+            set_training_mode=False  # keep in eval mode during finetuning
         )
 
         lr_scheduler.step(epoch)
@@ -471,12 +412,7 @@ def main(args):
                     'args': args,
                 }, checkpoint_path)
 
-        #if epoch % 3 != 0:
-        #    continue
-        if epoch % 1 == 0 or args.start_epoch == epoch:
-            test_stats = evaluate(data_loader_val, model, device)
-        if epoch % 50 == 0 and epoch >= 200:
-            test_stats = evaluate(data_loader_val, model_ema.ema, device)#, True)
+        test_stats = evaluate(data_loader_val, model, device)
         print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
         max_accuracy = max(max_accuracy, test_stats["acc1"])
         print(f'Max accuracy: {max_accuracy:.2f}%')
