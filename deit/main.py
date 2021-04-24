@@ -252,6 +252,7 @@ def main(args):
         drop_rate=args.drop,
         drop_path_rate=args.drop_path,
         drop_block_rate=None,
+        use_talk=args.use_talk,
     )
 
     if args.finetune:
