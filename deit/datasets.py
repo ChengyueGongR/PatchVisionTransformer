@@ -98,7 +98,10 @@ def build_transform(is_train, args):
 
     t = []
     if resize_im:
-        size = int((256 / 224) * args.input_size)
+        if args.input_size > 300:
+            size = args.input_size
+        else:
+            size = int((256 / 224) * args.input_size)
         t.append(
             transforms.Resize(size, interpolation=3),  # to maintain same ratio w.r.t. 224 images
         )
