@@ -23,7 +23,7 @@ train for longer time: `python -m torch.distributed.launch --nproc_per_node=8 --
 
 # Model Zoo
 
-We provide baseline DeiT models pretrained on ImageNet 2012.
+We provide models pretrained on ImageNet 2012.
 
 | name | acc@1 | acc@5 | #params | url |
 | --- | --- | --- | --- | --- |
