@@ -134,110 +134,6 @@ default_cfgs = {
         input_size=(3, 384, 384), crop_pct=1.0),
 }
 
-
-class AttentionDrop(nn.Module):
-    def __init__(self, drop_rate=.02):
-        super().__init__()
-        self.drop_rate = drop_rate
-    def generate_mask(self, num_token, seed=None):
-        '''
-        column = 2
-        width = int(num_token ** .5)
-        left_ind = random.randint(1 + column*width, num_token -1-column-column*width)
-        right_ind = left_ind + column
-        mask = torch.zeros_like(mask)
-        mask[:, :, left_ind:right_ind, :] = -1e10 * torch.ones_like(mask[:, :, left_ind:right_ind, :])
-        # mask[:, :, :, left_ind:right_ind] = -1e10 * torch.ones_like(mask[:, :, :,  left_ind:right_ind])
-        for raw_item in range(column*2+1):
-            item = raw_item - column
-            # mask[:, :, left_ind+item*width:right_ind+item*width, left_ind:right_ind] = torch.zeros_like(mask[:, :, left_ind:right_ind, left_ind:right_ind])
-            mask[:, :, left_ind:right_ind, left_ind+item*width:right_ind+item*width] = torch.zeros_like(mask[:, :, left_ind:right_ind, left_ind:right_ind])
-        '''
-        width = int(num_token ** .5)
-        mask = torch.ones([width, width]).cuda()
-        '''
-        left_ind = random.randint(0, width-1)
-        seed = random.randint(0, 3)
-        if seed == 0:
-            mask[:left_ind, :left_ind] = -1 * torch.ones_like(mask[:left_ind, :left_ind])
-        elif seed == 1:
-            mask[left_ind:, :left_ind] = -1 * torch.ones_like(mask[left_ind:, :left_ind])
-        elif seed == 2:
-            mask[:left_ind, left_ind:] = -1 * torch.ones_like(mask[:left_ind, left_ind:])
-        else:
-            mask[left_ind:, left_ind:] = -1 * torch.ones_like(mask[left_ind:, left_ind:])
-        '''
-
-        '''
-        max_length = min(width, int(num_token * self.drop_rate))
-        length = random.randint(1, max(1, max_length - 1))
-        mask_width = int(num_token * self.drop_rate) // length
-        if mask_width > width:
-            mask_width = width
-        mask_length = int(num_token * self.drop_rate) // mask_width
-        '''
-        
-        # '''
-        mask_length = 10
-        mask_width = 10
-        
-        length_left_ind = random.randint(0, max(0, width - mask_length - 1))
-        length_right_ind = length_left_ind + mask_length
-        width_left_ind = random.randint(0, max(0, width - mask_width - 1))
-        width_right_ind = width_left_ind + mask_width
-        mask[length_left_ind:length_right_ind, width_left_ind:width_right_ind] = -1 * torch.ones_like(mask[length_left_ind:length_right_ind, width_left_ind:width_right_ind])
-        # '''
-
-        mask = torch.cat((torch.zeros([1]).cuda(), mask.reshape(-1)))
-        mask = torch.matmul(mask.reshape(-1, 1), mask.reshape(1, -1))
-
-        mask = torch.where(mask < torch.zeros_like(mask), torch.ones_like(mask) * -1e10, torch.zeros_like(mask))
-        # mask[left_ind:left_ind+width, :left_ind] = -1e10 * torch.ones_like(mask[left_ind:left_ind+width, :left_ind])
-        # mask[left_ind:left_ind+width, left_ind+width:] = -1e10 * torch.ones_like(mask[left_ind:left_ind+width, left_ind+width:])
-        
-        return mask
-
-    
-    def forward(self, x):
-        if self.training:
-            num_batch, num_head, num_token = x.shape[0], x.shape[1], x.shape[2]
-            
-            # mask = torch.cat([self.generate_mask(num_token).reshape(1, num_token, num_token) for item in range(num_head * num_batch)], dim=0)
-            # x = torch.where(mask.reshape(num_batch, num_head, num_token, num_token) 
-
-            mask = torch.cat([self.generate_mask(num_token, item % 4).reshape(1, num_token, num_token) for item in range(num_head)], dim=0)
-            mask = mask.reshape(1, num_head, num_token, num_token).repeat(num_batch, 1, 1, 1)
-            
-            
-            '''
-            mask = torch.where(mask < torch.zeros_like(mask), torch.zeros_like(mask), torch.ones_like(mask))
-            # re-scale
-            x = mask * x
-            x /= torch.sum(x, dim=-1, keepdim=True).detach()
-            '''
-            x = torch.where(mask < torch.zeros_like(mask), mask, x)
-            
-            # print(x.shape)
-            return x
-            # return torch.where(mask < torch.zeros_like(mask), torch.zeros_like(mask), torch.ones_like(mask)) * x
-            # return x + mask.detach()
-        return x
-    
-class Jigsaw(nn.Module):
-    def __init__(self, jigsaw_size=2):
-        super().__init__()
-        self.jigsaw_size = jigsaw_size
-
-    def forward(self, x):
-        if self.training:
-            num_batch, num_patchs, num_channels = x.size()
-            subimg_size = int(num_patchs ** .5 // self.jigsaw_size)
-            trans_x = x
-            trans_x[:, 1:, :] = x[:, 1:, :].permute(0, 2, 1).reshape(num_batch, num_channels, subimg_size, self.jigsaw_size, subimg_size, self.jigsaw_size)[:, :, :, torch.randperm(self.jigsaw_size).cuda().long(), :, :][:, :, :, :, :, torch.randperm(self.jigsaw_size).cuda().long()].reshape(num_batch, num_channels, -1).permute(0, 2, 1)
-            return trans_x
-        
-        return x
-
 class Mlp(nn.Module):
     def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.):
         super().__init__()
@@ -258,7 +154,7 @@ class Mlp(nn.Module):
 
 
 class Attention(nn.Module):
-    def __init__(self, dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0., proj_drop=0.):
+    def __init__(self, dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0., proj_drop=0., use_talk=True):
         super().__init__()
         self.num_heads = num_heads
         head_dim = dim // num_heads
@@ -267,12 +163,14 @@ class Attention(nn.Module):
         # self.scale = qk_scale or head_dim ** -0.5 * 2 # re-scale 
 
         self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
-        self.attn_drop = 0. # AttentionDrop()
+        self.attn_drop = 0. 
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
         
-        self.proj_pre = nn.Linear(num_heads, num_heads, bias=False)
-        self.proj_post = nn.Linear(num_heads, num_heads, bias=False)
+        self.use_talk = use_talk
+        if self.use_talk:
+            self.proj_pre = nn.Linear(num_heads, num_heads, bias=False)
+            self.proj_post = nn.Linear(num_heads, num_heads, bias=False)
 
         
 
@@ -283,9 +181,11 @@ class Attention(nn.Module):
 
         attn = (q @ k.transpose(-2, -1)) * self.scale
 
-        attn = self.proj_pre(attn.permute(0,2,3,1)).permute(0,3,1,2)
+        if self.use_talk:
+            attn = self.proj_pre(attn.permute(0,2,3,1)).permute(0,3,1,2)
         attn = attn.softmax(dim=-1)
-        attn = self.proj_post(attn.permute(0,2,3,1)).permute(0,3,1,2)
+        if self.use_talk:
+            attn = self.proj_post(attn.permute(0,2,3,1)).permute(0,3,1,2)
 
         x = (attn @ v).transpose(1, 2).reshape(B, N, C)
         x = self.proj(x)
@@ -296,11 +196,11 @@ class Attention(nn.Module):
 class Block(nn.Module):
 
     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop=0., attn_drop=0.,
-                 drop_path=0., act_layer=nn.GELU, norm_layer=nn.LayerNorm):
+                 drop_path=0., act_layer=nn.GELU, norm_layer=nn.LayerNorm, use_talk=True):
         super().__init__()
         self.norm1 = norm_layer(dim)
         self.attn = Attention(
-            dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop)
+            dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop, use_talk=use_talk)
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
         self.norm2 = norm_layer(dim)
@@ -310,9 +210,7 @@ class Block(nn.Module):
     def forward(self, x):
         post_x, proj = self.attn(self.norm1(x))
         x = x + self.drop_path(post_x)
-        # x, attn = x + self.drop_path(self.attn(self.norm1(x), prev_attn))
-        
-        # x = x + self.mlp(self.norm2(x))
+ 
         x = x + self.drop_path(self.mlp(self.norm2(x)))
         return x, proj
 
@@ -390,7 +288,7 @@ class VisionTransformer(nn.Module):
     """
     def __init__(self, img_size=224, patch_size=16, in_chans=3, num_classes=1000, embed_dim=768, depth=12,
                  num_heads=12, mlp_ratio=4., qkv_bias=True, qk_scale=None, representation_size=None,
-                 drop_rate=0., attn_drop_rate=0., drop_path_rate=0., hybrid_backbone=None, norm_layer=None):
+                 drop_rate=0., attn_drop_rate=0., drop_path_rate=0., hybrid_backbone=None, norm_layer=None, use_talk=True):
         """
         Args:
             img_size (int, tuple): input image size
@@ -434,7 +332,7 @@ class VisionTransformer(nn.Module):
         self.blocks = nn.ModuleList([
             Block(
                 dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
-                drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[i], norm_layer=norm_layer)
+                drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[i], norm_layer=norm_layer, use_talk=use_talk)
             for i in range(depth)])
         self.norm = norm_layer(embed_dim)
 
