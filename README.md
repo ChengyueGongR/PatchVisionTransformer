@@ -27,14 +27,21 @@ We provide models pretrained on ImageNet 2012. More models will be uploaded.
 
 
 
-For Deit-B12, run: ```python -m torch.distributed.launch --nproc_per_node=XX --master_port=XX --use_env main.py --model deit_base_patch16_224 --aa rand-m9-mstd0.5-inc1  --input-size 224 --batch-size 16 --num_workers 2 --data-path path --output_dir output_dir --resume model.pth --eval```, giving 
+For Deit-B12, run: 
+```
+python -m torch.distributed.launch --nproc_per_node=XX --master_port=XX --use_env main.py --model deit_base_patch16_224 --aa rand-m9-mstd0.5-inc1  --input-size 224 --batch-size 16 --num_workers 2 --data-path path --output_dir output_dir --resume model.pth --eval
+```
+giving 
 ```
 * Acc@1 79.854 Acc@5 94.968 loss 0.881
 ```
 
 # Train
 
-For Deit-B12, run: ```python -m torch.distributed.launch --nproc_per_node=XX --master_port=XX --use_env main.py --model deit_base_patch16_224 --aa rand-m9-mstd0.5-inc1  --input-size 224 --batch-size 72 --num_workers 4 --data-path path --output_dir output_dir -no-repeated-aug --epochs 300 --model-ema-decay 0.99996 --drop-path 0.5 --drop .0 --mixup .0 --mixup-switch-prob 0.0```,
+For Deit-B12, run: 
+```
+python -m torch.distributed.launch --nproc_per_node=XX --master_port=XX --use_env main.py --model deit_base_patch16_224 --aa rand-m9-mstd0.5-inc1  --input-size 224 --batch-size 72 --num_workers 4 --data-path path --output_dir output_dir -no-repeated-aug --epochs 300 --model-ema-decay 0.99996 --drop-path 0.5 --drop .0 --mixup .0 --mixup-switch-prob 0.0
+```
 and further refine the model by 
 ```
 python -m torch.distributed.launch --nproc_per_node=XX --master_port=XX --use_env main.py --model deit_base_patch16_224 --aa rand-m9-mstd0.5-inc1  --input-size 224 --batch-size 72 --num_workers 4 --data-path path --output_dir output_dir -no-repeated-aug --start_epoch 300 --epochs 400 --resume model.pth --model-ema-decay 0.99996 --drop-path 0.75 --drop .0 --mixup .0 --mixup-switch-prob 0.0
