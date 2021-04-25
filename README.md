@@ -11,7 +11,7 @@ cd `timm_talk`
 cd `../deit`
 
 Before using it, make sure you have the pytorch-image-models [`timm`] package by [Ross Wightman](https://github.com/rwightman) installed. Note that our work relies of the augmentations proposed in this library. 
-Here we rely on a typical version of [`timm==0.3.2`] and will clean up the code before June 2021.
+Here we rely on a typical version of [`timm`] and will clean up the code before June 2021.
 
 # Model Zoo
 
