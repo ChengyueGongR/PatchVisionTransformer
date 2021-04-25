@@ -2,6 +2,8 @@
 
 This repository contains PyTorch evaluation code, training code and pretrained models. These codes have not been cleaned up yet, and will be refined before June 2021.
 
+We will further upload results on other model architectures.
+
 # Getting Started 
 
 cd `timm_talk`
