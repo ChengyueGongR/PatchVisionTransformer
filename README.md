@@ -6,14 +6,9 @@ We will further upload results on other model architectures.
 
 # Getting Started 
 
-cd `timm_talk`
-
-`pip install --upgrade .`
-
-cd `../deit`
+cd `./deit`
 
 Before using it, make sure you have the pytorch-image-models [`timm`] package by [Ross Wightman](https://github.com/rwightman) installed. Note that our work relies of the augmentations proposed in this library. 
-Here we rely on a typical version of [`timm`] and will clean up the code before June 2021.
 
 # Model Zoo
 
