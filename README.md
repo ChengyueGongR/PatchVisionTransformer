@@ -23,7 +23,7 @@ train for longer time: `python -m torch.distributed.launch --nproc_per_node=8 --
 
 # Model Zoo
 
-We provide models pretrained on ImageNet 2012. More models will be uploaded
+We provide models pretrained on ImageNet 2012. More models will be uploaded.
 
 | name | acc@1 | acc@5 | #params | url |
 | --- | --- | --- | --- | --- |
