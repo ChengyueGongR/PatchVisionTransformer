@@ -1,5 +1,6 @@
 # VisionTransformer
 
+This repository contains PyTorch evaluation code, training code and pretrained models. These codes have not been cleaned up yet, and will be refined before June 2021.
 
 # Getting Started 
 
@@ -9,6 +10,8 @@ cd `timm_talk`
 
 cd `../deit`
 
+Before using it, make sure you have the pytorch-image-models [timm] package by [Ross Wightman](https://github.com/rwightman) installed. Note that our work relies of the augmentations proposed in this library. 
+Here we rely on a typical version of [timm] and will clean up the code before June 2021.
 
 # Model Zoo
 
