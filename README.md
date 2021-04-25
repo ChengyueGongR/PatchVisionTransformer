@@ -33,7 +33,7 @@ python -m torch.distributed.launch --nproc_per_node=XX --master_port=XX --use_en
 ```
 giving 
 ```
-* Acc@1 79.854 Acc@5 94.968 loss 0.881
+Acc@1 82.928 Acc@5 96.342 loss 0.721
 ```
 
 # Train
