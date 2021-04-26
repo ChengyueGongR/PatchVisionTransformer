@@ -22,6 +22,13 @@ We provide models pretrained on ImageNet 2012. More models will be uploaded.
 | VIT-B24 | 83.3 | 96.4 | 172M| [model](https://drive.google.com/file/d/1TKG7UIQvFTpoMMLffwYEhYDPoCyzXDhu/view?usp=sharing) |
 | VIT-B12-384 | 84.2 | 97.0 | 86M | [model](https://drive.google.com/file/d/1ps-DDxjtbS9fdbSspl-LKScs_IZENKaG/view?usp=sharing) |
 
+We finetune the checkpoint at [VIT](https://github.com/google-research/vision_transformer).
+
+| name | acc@1 | acc@5 | #params | url |
+| --- | --- | --- | --- | --- |
+| VIT-L24 | 83.9 | 96.7 | 305M | [model](https://drive.google.com/file/d/1ByhRxBdb7qp2XF2voHgE3_zJ6mL_0VJW/view?usp=sharing) |
+| VIT-L24-384 | 85.4 | 96.7 | 305M |  |
+
 ## Evaluate 
 
 For Deit-B12, run: 
