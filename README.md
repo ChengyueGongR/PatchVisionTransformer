@@ -35,6 +35,8 @@ Acc@1 82.928 Acc@5 96.342 loss 0.721
 
 # Train
 
+[The training code is not fully available.]
+
 For Deit-B12, run: 
 ```
 python -m torch.distributed.launch --nproc_per_node=XX --master_port=XX --use_env main.py --model deit_base_patch16_224 --aa rand-m9-mstd0.5-inc1  --input-size 224 --batch-size 72 --num_workers 4 --data-path path --output_dir output_dir -no-repeated-aug --epochs 300 --model-ema-decay 0.99996 --drop-path 0.5 --drop .0 --mixup .0 --mixup-switch-prob 0.0
