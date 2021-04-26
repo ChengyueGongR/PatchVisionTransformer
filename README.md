@@ -42,7 +42,7 @@ Acc@1 82.928 Acc@5 96.342 loss 0.721
 
 ## Train
 
-[The training code is not fully available.]
+[The training code is not fully available and will be changed.]
 
 For Deit-B12, run: 
 ```
