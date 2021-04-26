@@ -52,7 +52,7 @@ and further refine the model by
 ```
 python -m torch.distributed.launch --nproc_per_node=XX --master_port=XX --use_env main.py --model deit_base_patch16_224 --aa rand-m9-mstd0.5-inc1  --input-size 224 --batch-size 72 --num_workers 4 --data-path path --output_dir output_dir -no-repeated-aug --start_epoch 300 --epochs 400 --resume model.pth --model-ema-decay 0.99996 --drop-path 0.75 --drop .0 --mixup .0 --mixup-switch-prob 0.0
 ```
-## finetune 
+## Finetune Model from ImageNet-22k
 
 ```
 python -m torch.distributed.launch --nproc_per_node=XX --master_port=XX --use_env main.py --model deit_large_patch16_224 --aa rand-n1-m1-mstd0.5-inc1 --input-size 224 --batch-size 16 --num_workers 1 --data-path path --output_dir output_dir -no-repeated-aug --smoothing 1e-6 --weight-decay 1e-8 --lr 6e-5 --start_epoch 0 --reprob 1e-6 --resume vit_checkpoint --epochs 40 --model-ema-decay 0.99996 --drop-path 0. --drop .0 --mixup .0 --mixup-switch-prob 0.0
