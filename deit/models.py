@@ -209,8 +209,6 @@ class VisionTransformer(nn.Module):
         x = self.pre_logits(x)
 
         if self.training:
-            # calculate relation loss
-            # patches = patch[-1]
             num_batch, num_patch, num_dim = patches.size()
             img_size = int(num_patch ** .5)
             patches = patches.permute(0, 2, 1).reshape(num_batch, num_dim, img_size, img_size)
@@ -221,27 +219,25 @@ class VisionTransformer(nn.Module):
         patches = patches.permute(0, 2, 1).reshape(num_batch, num_dim, img_size, img_size)
 
         return x, patches
+    
+    def similarity(se;f, patches, context_target, high_k=7):
+        num_batch, num_dim, img_size = patches.shape[0], patches.shape[1], patches.shape[-1]
+        low_order = F.avg_pool2d(patches, kernel_size=high_k, stride=1, padding=(high_k - 1) // 2) - patches / (high_k ** 2)
+        low_order *= (high_k ** 2) / (high_k ** 2 - 1)
+        high_order = (patches.mean(dim=(2, 3)) - patches / (img_size ** 2)) * (img_size ** 2) / (img_size ** 2 - 1)
 
+        pos_l = (context_target * patches.reshape(num_batch, num_dim, -1).permute(0, 2, 1)).sum(-1).reshape(-1, 1)
+        neg_l = (context_target * high_order.reshape(num_batch, num_dim, -1).permute(0, 2, 1)).sum(-1).reshape(-1, 1)
+        neg2_l = (context_target * low_order.reshape(num_batch, num_dim, -1).permute(0, 2, 1)).sum(-1).reshape(-1, 1)
+        return - torch.log(torch.cat((pos_l, neg_l, neg2_l), dim=-1).softmax(dim=-1)[:, 0] + 1e-8).mean()
     def forward(self, x, aux_class=None):
         if self.training:
             x, patches, r_loss, proj, context_target = self.forward_features(x)
             # x, patches, patch, r_loss = self.forward_features(x)
             aux_class_left, aux_class_right, pixel_ind = aux_class
             num_batch, num_dim, img_size = patches.shape[0], patches.shape[1], patches.shape[-1] # // 2
-            
-            def similarity(patches, context_target):
-                low_k, high_k = 1, 7
-                low_order = F.avg_pool2d(patches, kernel_size=high_k, stride=1, padding=(high_k - 1) // 2) - patches / (high_k ** 2)
-                low_order *= (high_k ** 2) / (high_k ** 2 - 1)
-                high_order = (patches.mean(dim=(2, 3)) - patches / (img_size ** 2)) * (img_size ** 2) / (img_size ** 2 - 1)
 
-                pos_l = (context_target * patches.reshape(num_batch, num_dim, -1).permute(0, 2, 1)).sum(-1).reshape(-1, 1)
-                neg_l = (context_target * high_order.reshape(num_batch, num_dim, -1).permute(0, 2, 1)).sum(-1).reshape(-1, 1)
-                neg2_l = (context_target * low_order.reshape(num_batch, num_dim, -1).permute(0, 2, 1)).sum(-1).reshape(-1, 1)
-                return - torch.log(torch.cat((pos_l, neg_l, neg2_l), dim=-1).softmax(dim=-1)[:, 0] + 1e-8).mean()
-
-            
-            sim_loss = similarity(patches, context_target.detach()) 
+            sim_loss = self.similarity(patches, context_target.detach()) 
             target_lst, mask_lst, targets = aux_class
             patch_loss = 0.
             for _ in range(len(mask_lst)):
@@ -252,7 +248,7 @@ class VisionTransformer(nn.Module):
             
             x = self.head(self.drop(x))
 
-            return x, r_loss * 0. + patch_loss, sim_loss, proj
+            return x, patch_loss, sim_loss, proj
         else:
             x, patches = self.forward_features(x)
             
