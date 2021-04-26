@@ -10,7 +10,9 @@ cd `./deit`
 
 Before using it, make sure you have the pytorch-image-models [`timm`] package by [Ross Wightman](https://github.com/rwightman) installed. Note that our work relies of the augmentations proposed in this library. 
 
-# Model Zoo
+# DEIT
+
+## Model Zoo
 
 We provide models pretrained on ImageNet 2012. More models will be uploaded.
 
@@ -20,9 +22,7 @@ We provide models pretrained on ImageNet 2012. More models will be uploaded.
 | VIT-B24 | 83.3 | 96.4 | 172M| [model](https://drive.google.com/file/d/1TKG7UIQvFTpoMMLffwYEhYDPoCyzXDhu/view?usp=sharing) |
 | VIT-B12-384 | 84.2 | 97.0 | 86M | [model](https://drive.google.com/file/d/1ps-DDxjtbS9fdbSspl-LKScs_IZENKaG/view?usp=sharing) |
 
-# Evaluate 
-
-
+## Evaluate 
 
 For Deit-B12, run: 
 ```
@@ -33,7 +33,7 @@ giving
 Acc@1 82.928 Acc@5 96.342 loss 0.721
 ```
 
-# Train
+## Train
 
 [The training code is not fully available.]
 
