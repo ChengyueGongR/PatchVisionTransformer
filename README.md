@@ -27,7 +27,7 @@ We finetune the checkpoint at [VIT](https://github.com/google-research/vision_tr
 | name | acc@1 | acc@5 | #params | url |
 | --- | --- | --- | --- | --- |
 | VIT-L24 | 83.9 | 96.7 | 305M | [model](https://drive.google.com/file/d/1ByhRxBdb7qp2XF2voHgE3_zJ6mL_0VJW/view?usp=sharing) |
-| VIT-L24-384 | 85.4 | 96.7 | 305M |  |
+| VIT-L24-384 | 85.4 | 96.7 | 305M | [model](https://drive.google.com/file/d/1ePXsAIzg5HOcd0nolpBTQHh2k2YDa7CM/view?usp=sharing) |
 
 ## Evaluate 
 
@@ -55,5 +55,11 @@ python -m torch.distributed.launch --nproc_per_node=XX --master_port=XX --use_en
 ## Finetune Model from ImageNet-22k
 
 ```
-python -m torch.distributed.launch --nproc_per_node=XX --master_port=XX --use_env main.py --model deit_large_patch16_224 --aa rand-n1-m1-mstd0.5-inc1 --input-size 224 --batch-size 16 --num_workers 1 --data-path path --output_dir output_dir -no-repeated-aug --smoothing 1e-6 --weight-decay 1e-8 --lr 6e-5 --start_epoch 0 --reprob 1e-6 --resume vit_checkpoint --epochs 40 --model-ema-decay 0.99996 --drop-path 0. --drop .0 --mixup .0 --mixup-switch-prob 0.0
+python -m torch.distributed.launch --nproc_per_node=XX --master_port=XX --use_env main.py --model deit_large_patch16_224 --aa rand-n1-m1-mstd0.5-inc1 --input-size 224 --batch-size 16 --num_workers 1 --data-path path --output_dir output_dir -no-repeated-aug --smoothing 1e-6 --weight-decay 1e-8 --lr 5e-5 --start_epoch 0 --reprob 1e-6 --resume vit_checkpoint --epochs 40 --model-ema-decay 0.99996 --drop-path 0. --drop .0 --mixup .0 --mixup-switch-prob 0.0
+```
+evaluate 
+```
+```
+python -m torch.distributed.launch --nproc_per_node=XX --master_port=XX --use_env main.py --model deit_large_patch16_224 --aa rand-n1-m1-mstd0.5-inc1 --input-size 224 --batch-size 16 --num_workers 1 --data-path path --output_dir output_dir -no-repeated-aug --smoothing 1e-6 --weight-decay 1e-8 --lr 5e-5 --start_epoch 0 --reprob 1e-6 --resume vit_checkpoint --epochs 40 --model-ema-decay 0.99996 --drop-path 0. --drop .0 --mixup .0 --mixup-switch-prob 0.0 --no-use-talk --eval
+```
 ```
