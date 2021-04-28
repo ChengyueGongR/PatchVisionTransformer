@@ -220,7 +220,7 @@ class VisionTransformer(nn.Module):
 
         return x, patches
     
-    def similarity(se;f, patches, context_target, high_k=7):
+    def similarity(self, patches, context_target, high_k=7):
         num_batch, num_dim, img_size = patches.shape[0], patches.shape[1], patches.shape[-1]
         low_order = F.avg_pool2d(patches, kernel_size=high_k, stride=1, padding=(high_k - 1) // 2) - patches / (high_k ** 2)
         low_order *= (high_k ** 2) / (high_k ** 2 - 1)
