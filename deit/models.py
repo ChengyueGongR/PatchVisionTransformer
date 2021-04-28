@@ -3,6 +3,7 @@
 import torch
 import torch.nn as nn
 from functools import partial
+import torch.nn.functional as F
 
 from timm.models.layers import StdConv2dSame, DropPath, to_2tuple, trunc_normal_
 from timm.models.vision_transformer import HybridEmbed, PatchEmbed, DistilledVisionTransformer, _cfg
