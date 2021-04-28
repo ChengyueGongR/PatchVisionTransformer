@@ -224,7 +224,7 @@ class VisionTransformer(nn.Module):
         num_batch, num_dim, img_size = patches.shape[0], patches.shape[1], patches.shape[-1]
         low_order = F.avg_pool2d(patches, kernel_size=high_k, stride=1, padding=(high_k - 1) // 2) - patches / (high_k ** 2)
         low_order *= (high_k ** 2) / (high_k ** 2 - 1)
-        high_order = (patches.mean(dim=(2, 3), deepdim=True) - patches / (img_size ** 2)) * (img_size ** 2) / (img_size ** 2 - 1)
+        high_order = patches.mean(dim=(2, 3), deepdim=True)) - patches / (img_size ** 2)) * (img_size ** 2) / (img_size ** 2 - 1)
 
         pos_l = (context_target * patches.reshape(num_batch, num_dim, -1).permute(0, 2, 1)).sum(-1).reshape(-1, 1)
         neg_l = (context_target * high_order.reshape(num_batch, num_dim, -1).permute(0, 2, 1)).sum(-1).reshape(-1, 1)
