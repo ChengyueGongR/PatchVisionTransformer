@@ -42,7 +42,7 @@ Acc@1 82.928 Acc@5 96.342 loss 0.721
 
 ## Train
 
-[The training code is not fully available and the results are currently not reproducable. Wait for our updates.]
+[The training code is not fully available and the results are currently not reproducable. Please wait for our updates.]
 
 For Deit-B12, run: 
 ```
