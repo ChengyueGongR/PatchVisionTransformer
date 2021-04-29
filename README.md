@@ -46,11 +46,11 @@ Acc@1 82.928 Acc@5 96.342 loss 0.721
 
 For Deit-B12, run: 
 ```
-python -m torch.distributed.launch --nproc_per_node=XX --master_port=XX --use_env main.py --model deit_base_patch16_224 --aa rand-m9-mstd0.5-inc1  --input-size 224 --batch-size 72 --num_workers 4 --data-path path --output_dir output_dir -no-repeated-aug --epochs 300 --model-ema-decay 0.99996 --drop-path 0.5 --drop .0 --mixup .0 --mixup-switch-prob 0.0 --no-use-talk 
+python -m torch.distributed.launch --nproc_per_node=XX --master_port=XX --use_env main.py --model deit_base_patch16_224 --aa rand-m9-mstd0.5-inc1  --input-size 224 --batch-size 72 --num_workers 4 --data-path path --output_dir output_dir -no-repeated-aug --epochs 300 --model-ema-decay 0.99996 --drop-path 0.5 --drop .0 --mixup .0 --mixup-switch-prob 0.0 
 ```
 and further refine the model by 
 ```
-python -m torch.distributed.launch --nproc_per_node=XX --master_port=XX --use_env main.py --model deit_base_patch16_224 --aa rand-m9-mstd0.5-inc1  --input-size 224 --batch-size 72 --num_workers 4 --data-path path --output_dir output_dir -no-repeated-aug --start_epoch 300 --epochs 400 --resume model.pth --model-ema-decay 0.99996 --drop-path 0.75 --drop .0 --mixup .0 --mixup-switch-prob 0.0 --no-use-talk
+python -m torch.distributed.launch --nproc_per_node=XX --master_port=XX --use_env main.py --model deit_base_patch16_224 --aa rand-m9-mstd0.5-inc1  --input-size 224 --batch-size 72 --num_workers 4 --data-path path --output_dir output_dir -no-repeated-aug --start_epoch 300 --epochs 400 --resume model.pth --model-ema-decay 0.99996 --drop-path 0.75 --drop .0 --mixup .0 --mixup-switch-prob 0.0 
 ```
 ## Finetune Models Trained on ImageNet-22k
 
