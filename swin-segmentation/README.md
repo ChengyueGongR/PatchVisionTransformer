@@ -20,7 +20,7 @@ We finetune the checkpoint and get following results.
 
 | name | mIoU | mIoU (ms + flip) | #params | url |
 | --- | --- | --- | --- | --- |
-| ADE20K | 83.0 | 45.5 | 234M | [model](), [log](https://drive.google.com/file/d/1va6Ptawr5C7bhGchz-028wrzObUgseHE/view?usp=sharing)|
+| ADE20K | 83.0 | 54.4 | 234M | [model](), [log](https://drive.google.com/file/d/1va6Ptawr5C7bhGchz-028wrzObUgseHE/view?usp=sharing)|
 | CityScapes | 82.9 | 83.9 | 234M | [model](), [log](https://drive.google.com/file/d/1j0Hub-HeMCUbeHhnGw79FHtvvxvSCz1y/view?usp=sharing)|
 
 # Train
