@@ -30,7 +30,7 @@ For ADE20K, run:
 ```
 bash tools/dist_train.sh configs/swin/upernet_swin_large_patch4_window12_512x512_160k_ade20k.py 8 --options model.pretrained=ckpt.pth model.backbone.use_checkpoint=True data.workers_per_gpu=1 work_dir=work_dir
 ```
-From the checkpoint ([model](), [log](https://drive.google.com/file/d/1-XL912aMs5E-rRfZeqknKZN30qsgO17B/view?usp=sharing)), further change iterations to 200K, drop_path of the backbone to 0.5, run:
+From the checkpoint ([model](https://drive.google.com/file/d/1SNRD-pHQ8LBW96oHcOUO6A652Tw1z-Hu/view?usp=sharing), [log](https://drive.google.com/file/d/1-XL912aMs5E-rRfZeqknKZN30qsgO17B/view?usp=sharing)), further change iterations to 200K, drop_path of the backbone to 0.5, run:
 ```
 bash tools/dist_train.sh configs/swin/upernet_swin_large_patch4_window12_512x512_160k_ade20k.py 8 --options model.pretrained=ckpt.pth model.backbone.use_checkpoint=True data.workers_per_gpu=1 work_dir=work_dir --resume-from work_dir/exp_name/latest.pth
 ```
