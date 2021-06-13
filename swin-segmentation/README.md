@@ -1,4 +1,4 @@
-# VisionTransformer
+# Segmentation
 
 This repository contains PyTorch evaluation code, training code and pretrained models for segmentation. It is based on [mmsegmentaion](https://github.com/open-mmlab/mmsegmentation/tree/v0.11.0) and [Swin-Transformer-Semantic-Segmentation](https://github.com/SwinTransformer/Swin-Transformer-Semantic-Segmentation)
 
@@ -20,8 +20,8 @@ We finetune the checkpoint and get following results.
 
 | name | mIoU | mIoU (ms + flip) | #params | url |
 | --- | --- | --- | --- | --- |
-| ADE20K | 83.0 | 45.5 | 234M | [model](https://drive.google.com/file/d/1ByhRxBdb7qp2XF2voHgE3_zJ6mL_0VJW/view?usp=sharing) [log](https://drive.google.com/file/d/1va6Ptawr5C7bhGchz-028wrzObUgseHE/view?usp=sharing)|
-| CityScapes | 82.9 | 83.9 | 234M | [model](https://drive.google.com/file/d/1ePXsAIzg5HOcd0nolpBTQHh2k2YDa7CM/view?usp=sharing) [log](https://drive.google.com/file/d/1j0Hub-HeMCUbeHhnGw79FHtvvxvSCz1y/view?usp=sharing)|
+| ADE20K | 83.0 | 45.5 | 234M | [model](https://drive.google.com/file/d/1ByhRxBdb7qp2XF2voHgE3_zJ6mL_0VJW/view?usp=sharing), [log](https://drive.google.com/file/d/1va6Ptawr5C7bhGchz-028wrzObUgseHE/view?usp=sharing)|
+| CityScapes | 82.9 | 83.9 | 234M | [model](https://drive.google.com/file/d/1ePXsAIzg5HOcd0nolpBTQHh2k2YDa7CM/view?usp=sharing), [log](https://drive.google.com/file/d/1j0Hub-HeMCUbeHhnGw79FHtvvxvSCz1y/view?usp=sharing)|
 
 # Train
 
