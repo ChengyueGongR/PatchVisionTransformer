@@ -10,6 +10,22 @@ cd `./deit`
 
 Before using it, make sure you have the pytorch-image-models [`timm`] package by [Ross Wightman](https://github.com/rwightman) installed. Note that our work relies of the augmentations proposed in this library. 
 
+# SWIN
+We provide models pretrained on ImageNet 2012 and finetune the checkpoint on segmentation datasets.
+
+| name | acc@1 | #params | url |
+| --- | --- | --- | --- |
+| SWIN-Large | 87.4 | 197M | [model](https://drive.google.com/file/d/1elIVsE_W5jHCfBSALCjF0f79Unk-bmS0/view?usp=sharing) |
+
+We finetune the checkpoint and get following results.
+
+| name | mIoU | mIoU (ms + flip) | #params | url |
+| --- | --- | --- | --- | --- |
+| ADE20K | 83.0 | 54.4 | 234M | [model](https://drive.google.com/file/d/1InHGA0cqDUQwi1qZCZtXiFet9uHyw91c/view?usp=sharing), [log](https://drive.google.com/file/d/1va6Ptawr5C7bhGchz-028wrzObUgseHE/view?usp=sharing)|
+| CityScapes | 82.9 | 83.9 | 234M | [model](https://drive.google.com/file/d/1z69_V6JPqq5oR7aJOgw9YVyNjktEX3sV/view?usp=sharing), [log](https://drive.google.com/file/d/1j0Hub-HeMCUbeHhnGw79FHtvvxvSCz1y/view?usp=sharing)|
+
+For more details, please refer to [README](https://github.com/ChengyueGongR/PatchVisionTransformer/blob/main/swin-segmentation/README.md).
+
 # DEIT
 
 ## Model Zoo
