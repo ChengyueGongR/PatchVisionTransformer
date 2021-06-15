@@ -41,9 +41,9 @@ bash tools/dist_test.sh configs/swin/upernet_swin_large_patch4_window12_512x512_
 
 For Cityscapes, run: 
 ```
-bash tools/dist_train.sh configs/swin/upernet_swin_large_patch4_window12_1025x1025_160k_cityscapes.py 8 --options model.pretrained=ckpt.pth model.backbone.use_checkpoint=True data.workers_per_gpu=1 work_dir=work_dir
+bash tools/dist_train.sh configs/swin/upernet_swin_large_patch4_window12_1025x1025_80k_cityscapes.py 8 --options model.pretrained=ckpt.pth model.backbone.use_checkpoint=True data.workers_per_gpu=1 work_dir=work_dir
 ```
 Finally evaluate with
 ```
-bash tools/dist_test.sh configs/swin/upernet_swin_large_patch4_window12_1025x1025_160k_cityscapes.py work_dir/exp_name/latest.pth 2 --aug-test --eval mIoU
+bash tools/dist_test.sh configs/swin/upernet_swin_large_patch4_window12_1025x1025_80k_cityscapes.py work_dir/exp_name/latest.pth 2 --aug-test --eval mIoU
 ```
