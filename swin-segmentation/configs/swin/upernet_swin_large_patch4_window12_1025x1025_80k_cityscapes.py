@@ -1,6 +1,6 @@
 _base_ = [
-    '../_base_/models/upernet_swin.py', '../_base_/datasets/cityscapes_769x769.py',
-    '../_base_/default_runtime.py', '../_base_/schedules/schedule_160k.py'
+    '../_base_/models/upernet_swin.py', '../_base_/datasets/cityscapes_1025x1025.py',
+    '../_base_/default_runtime.py', '../_base_/schedules/schedule_80k.py'
 ]
 model = dict(
     backbone=dict(
@@ -9,17 +9,17 @@ model = dict(
         num_heads=[4, 8, 16, 32],
         window_size=12,
         ape=False,
-        drop_path_rate=0.6,
+        drop_path_rate=0.5,
         patch_norm=True,
         use_checkpoint=False
     ),
     decode_head=dict(
         in_channels=[128, 256, 512, 1024],
-        num_classes=150
+        num_classes=20
     ),
     auxiliary_head=dict(
         in_channels=512,
-        num_classes=150
+        num_classes=20
     ))
 
 # AdamW optimizer, no weight decay for position embedding & layer norm in backbone
@@ -34,5 +34,5 @@ lr_config = dict(_delete_=True, policy='poly',
                  warmup_ratio=1e-6,
                  power=1.0, min_lr=0.0, by_epoch=False)
 
-# By default, models are trained on 8 GPUs with 2 images per GPU
-data=dict(samples_per_gpu=2)
+# By default, models are trained on 8 GPUs with 1 images per GPU
+data=dict(samples_per_gpu=1)
